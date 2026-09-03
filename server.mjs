@@ -131,6 +131,16 @@ const ALLOWLIST = (() => {
   return { mode: "open" };
 })();
 
+// allowlist 없이 뜨면 토큰 스코프 전체가 열린다. 조용히 그렇게 되면 안 된다.
+if (ALLOWLIST.mode === "open") {
+  process.stderr.write(
+    "[bb-mcp] 경고: 허용 저장소 목록이 없어 제한 없이 동작합니다.\n" +
+      "  토큰이 접근 가능한 모든 저장소가 열립니다.\n" +
+      `  좁히려면 ${DEFAULT_FILE} 에 'workspace/repo' 를 한 줄씩 적고 세션을 재시작하세요.\n` +
+      "  또는 BITBUCKET_ALLOWED_REPOS 로 직접 지정합니다.\n",
+  );
+}
+
 const FORMAT_HINT =
   "한 줄에 workspace/repo 하나씩 적습니다. `#` 이후는 주석입니다.";
 

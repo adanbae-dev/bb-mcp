@@ -930,3 +930,38 @@ test("bb_doctor는 스냅샷인지 재읽기인지 알려준다", async () => {
     { BITBUCKET_ALLOWLIST_RELOAD: "true" },
   );
 });
+
+test("allowlist 없이 뜨면 stderr 에 개방 경고를 남긴다", async () => {
+  // 조용히 전체 개방되면 안 된다. 경고는 stderr(= MCP 로그)로 간다.
+  const { spawn } = await import("node:child_process");
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-open-"));
+  try {
+    const err = await new Promise((resolve) => {
+      const p = spawn(process.execPath, [SERVER], {
+        env: {
+          PATH: process.env.PATH,
+          HOME: tmp, // 기본 allowlist 파일이 없는 홈
+          BITBUCKET_EMAIL: EMAIL,
+          BITBUCKET_API_TOKEN: TOKEN,
+        },
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      let buf = "";
+      p.stderr.on("data", (b) => (buf += b));
+      setTimeout(() => { p.kill("SIGKILL"); resolve(buf); }, 900);
+    });
+    assert.match(err, /제한 없이 동작/);
+    assert.match(err, /모든 저장소가 열립니다/);
+    assert.ok(!err.includes(TOKEN), "경고에 토큰이 실리면 안 된다");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("allowlist 가 있으면 개방 경고를 남기지 않는다", async () => {
+  await withFileAllowlist("acme/repo-a\n", async ({ client }) => {
+    // 정상 기동이면 경고 없이 툴이 붙는다
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    assert.ok(names.includes("bb_doctor"));
+  });
+});

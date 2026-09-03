@@ -113,9 +113,13 @@ allowlist 는 **저장소 밖**(`~/.config/bb-mcp/allowed-repos`)에 둔다.
 
 ### 첫 실행
 
-새 설치는 allowlist 가 비어 있어 **모든 저장소가 차단된다**(fail-closed).
-정상이다. `bb_doctor` 가 그 사실과 조치를 알려준다.
+`setup.sh` 로 설치하면 allowlist 파일이 만들어지고 `_FILE` 이 등록된다.
+파일이 비어 있으면 **모든 저장소가 차단된다**(fail-closed). 정상이다.
 저장소를 넣고 세션을 재시작하면 열린다.
+
+손으로 `claude mcp add` 할 때 `_FILE` 을 빼고 파일도 안 만들면 **`open` 모드로
+뜨고 토큰 스코프 전체가 열린다.** 서버가 기동 시 stderr 에 경고하지만,
+그 경고를 못 보면 넓게 열린 상태로 쓰게 된다. `bb_doctor` 로 확인한다.
 
 ### Bitbucket 종류
 
@@ -241,7 +245,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 121개 통과 확인
+npm test   # 123개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).

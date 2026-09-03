@@ -295,6 +295,68 @@ bb_comment(repo, id, body, path, line)  줄 단위로 코멘트
 env가 파일보다 우선한다. `bb_doctor` 응답의 `allowlist 소스`가 지금 어느 모드이고
 언제 읽는지 알려준다.
 
+### 언제 어떻게 만드나
+
+`setup.sh` 4단계가 대화형으로 만든다. 한 줄씩 입력하고 빈 줄로 끝낸다.
+형식이 틀린 줄(3단 경로, 앞 슬래시, 공백)은 그 자리에서 거부한다.
+다 끝나면 권한을 600으로 조인다.
+
+손으로 만들려면:
+
+```bash
+mkdir -p ~/.config/bb-mcp
+cat > ~/.config/bb-mcp/allowed-repos <<'EOF'
+# 리뷰 대상 저장소. 한 줄에 하나. `#` 이후는 주석.
+acme/web-app
+acme/admin-web
+EOF
+chmod 600 ~/.config/bb-mcp/allowed-repos
+```
+
+`workspace/repo` 는 브라우저에서 `bitbucket.org/` 다음에 오는 두 조각이다.
+`bitbucket.org/acme/web-app/pull-requests/12` → `acme/web-app`.
+
+만든 뒤 **세션을 재시작해야 반영된다**(기동 시 스냅샷).
+
+### 안 만들면 전체가 열린다 ⚠️
+
+모드 결정은 기동 시 이 순서다.
+
+```
+BITBUCKET_ALLOWED_REPOS 있음        → env  (그 목록)
+BITBUCKET_ALLOWED_REPOS_FILE 있음   → file (파일이 없어도 file. 전체 차단)
+기본 파일이 존재                     → file
+셋 다 없음                          → open (제한 없음)
+```
+
+`claude mcp add` 에 `_FILE` 을 주지 않고 파일도 만들지 않으면 **`open` 모드로
+뜨고 토큰이 접근 가능한 모든 저장소가 열린다.** 그래서 서버가 기동 시
+stderr 에 경고한다.
+
+```
+[bb-mcp] 경고: 허용 저장소 목록이 없어 제한 없이 동작합니다.
+  토큰이 접근 가능한 모든 저장소가 열립니다.
+```
+
+`setup.sh` 는 항상 `_FILE` 을 넣으므로 이 상태로 빠지지 않는다
+(파일이 비면 전체 차단, 즉 fail-closed).
+
+### 저장소 이름을 모를 때
+
+`open` 모드에서 한 번 나열해 목록을 만든 뒤 좁히는 방법이 있다.
+
+```
+bb_repos({ workspace: "acme" })     # open 모드에서만 동작
+```
+
+allowlist 가 설정돼 있으면 `bb_repos` 는 **그 목록만** 조회하고
+워크스페이스 전체는 노출하지 않는다. 즉 순서가 이렇다.
+
+1. allowlist 없이 등록 → `open` 모드 (경고가 뜬다)
+2. `bb_repos({workspace})` 로 저장소 이름 확인
+3. 파일에 필요한 것만 적고 `_FILE` 을 넣어 재등록
+4. 세션 재시작 → `file` 모드로 좁혀짐
+
 ### 파일 모드 (권장)
 
 ```bash
@@ -411,7 +473,7 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 121개
+npm test    # 123개
 ```
 
 - `test/lib.test.mjs` (60) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
