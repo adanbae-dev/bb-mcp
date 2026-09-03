@@ -12,10 +12,11 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `test/lib.test.mjs` | 단위 테스트 |
 | `test/integration.test.mjs` | 가짜 Bitbucket API + 실제 MCP 클라이언트 |
 | `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·등록) |
-| `.claude-plugin/plugin.json` | 플러그인 매니페스트 |
-| `skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
-| `commands/bb-review.md` | `/bb-review` 진입점 |
-| `plugin-template/mcp.json` | 배포용 MCP 선언 (루트에 두면 안 되는 이유는 그 폴더 README) |
+| `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
+| `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
+| `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
+| `plugin/commands/bb-review.md` | `/bb-review` 진입점 |
+| [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 변경 이력 |
 | `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
 
@@ -38,7 +39,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 
 ```bash
 npm i @modelcontextprotocol/sdk@1 zod@3
-npm test                                              # 107개
+npm test                                              # 121개
 
 # 토큰 (-w 뒤에 값을 직접. 대화형 프롬프트는 128자에서 잘린다)
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
@@ -72,49 +73,55 @@ Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.3
 
 MCP 서버만 등록하면 툴 12개가 생기지만, **툴은 슬래시 명령이 아니다.**
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
-`/bb-pr-review`처럼 직접 치려면 **스킬**을 설치해야 한다.
+`/bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
+
+### 플러그인으로 설치 (권장)
 
 ```bash
-./setup.sh          # 6단계에서 스킬까지 설치한다
+claude plugin marketplace add ./            # `.` 은 거부된다. `./` 로 쓴다
+claude plugin install bb-pr-review@bb-mcp --scope user
+claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 ```
 
-또는 직접:
+세션 재시작 후 `/bb-pr-review`와 `/bb-review`가 뜬다.
+
+배포할 때는 `./` 대신 git URL이나 `owner/repo` 를 쓴다.
+
+### 스킬만 복사
 
 ```bash
 mkdir -p ~/.claude/skills/bb-pr-review ~/.claude/commands
-cp skills/bb-pr-review/*.md ~/.claude/skills/bb-pr-review/
-cp commands/bb-review.md ~/.claude/commands/
+cp plugin/skills/bb-pr-review/*.md ~/.claude/skills/bb-pr-review/
+cp plugin/commands/bb-review.md ~/.claude/commands/
 ```
 
-다음 세션에서 `/bb-pr-review`(스킬)와 `/bb-review`(짧은 별칭)가 뜬다.
-스킬의 `trigger:` 프론트매터가 슬래시 명령을 만든다 — `~/.claude/skills/`에
-있어야 로드되고, **저장소의 `skills/` 디렉터리는 탐색되지 않는다.**
+`setup.sh` 6단계가 이걸 대신한다.
+
+스킬의 `trigger:` 프론트매터가 슬래시 명령을 만든다. **`~/.claude/skills/` 에
+있어야 로드되고, 저장소의 `plugin/skills/` 는 설치 없이는 탐색되지 않는다.**
+
+### 플러그인은 MCP 서버를 설치하지 않는다
+
+스킬·명령만 담는다. 서버를 플러그인으로 배포하지 않는 이유는 셋이다.
+
+| 이유 | 내용 |
+|---|---|
+| 자격증명 | `.mcp.json` 의 `${VAR}` 치환은 **셸 환경변수**를 읽는다. `userConfig` 는 플러그인 자기 코드가 읽는 별개 메커니즘이라 서버 env로 주입되지 않는다(§검증 근거는 CHANGELOG 0.9.0) |
+| 의존성 | 설치된 플러그인 디렉터리에 `node_modules` 가 생기는지 보장이 없다 |
+| 경로 | 루트 `.mcp.json` 은 이 저장소를 **프로젝트 스코프 MCP 설정으로 하이재킹한다**(아래) |
+
+서버는 `setup.sh` 또는 `claude mcp add --scope user` 로 등록한다.
 
 ### 저장소 루트에 `.mcp.json` 을 두지 않는다 ⚠️
 
-플러그인은 루트 `.mcp.json` 으로 MCP 서버를 선언하고 경로에
-`${CLAUDE_PLUGIN_ROOT}` 를 쓴다. 그런데 **이 저장소는 그 자체로 Claude Code
-프로젝트**라서, 루트 `.mcp.json` 은 프로젝트 스코프 MCP 설정으로 읽힌다.
-프로젝트 스코프는 user 스코프를 덮어쓰고, `${CLAUDE_PLUGIN_ROOT}` 는
-설치된 플러그인으로 로드될 때만 치환되므로 경로가 그대로 남아 서버가 못 뜬다.
+이 저장소는 그 자체로 Claude Code 프로젝트다. 루트 `.mcp.json` 은 프로젝트 스코프
+MCP 설정으로 읽히고, 프로젝트 스코프는 user 스코프를 덮어쓴다.
+`${CLAUDE_PLUGIN_ROOT}` 는 설치된 플러그인으로 로드될 때만 치환되므로 경로가
+문자열 그대로 남아 서버가 `CONNECTION_CLOSED` 로 죽는다. 실제로 한 번 그렇게 깨졌다.
 
-실제로 한 번 이렇게 깨졌다. `.gitignore` 에 `.mcp.json` 을 넣어 막아 뒀고,
-배포용 선언은 `plugin-template/mcp.json` 에 있다.
-
-### 플러그인으로 배포할 때
-
-`.claude-plugin/plugin.json` 은 스킬·명령 경로를 선언한다.
-
-```bash
-claude plugin validate .          # 매니페스트
-claude plugin validate ./skills   # 스킬
-claude plugin validate ./commands # 명령
-```
-
-MCP 서버까지 묶으려면 `plugin-template/mcp.json` 을 플러그인 루트의
-`.mcp.json` 으로 복사하고, 그 루트에 `server.mjs`·`lib.mjs`·`node_modules` 를
-함께 둔다. 자격증명은 `${BITBUCKET_EMAIL}` 처럼 치환으로 받고
-**토큰 값을 파일에 넣지 않는다.**
+그래서 플러그인 루트를 `plugin/` **하위 디렉터리**로 두고,
+마켓플레이스 매니페스트가 `source: "./plugin"` 으로 가리킨다.
+`.gitignore` 에 `.mcp.json` 을 넣어 루트에 다시 들어오지 못하게 막았다.
 
 ## 2. 환경변수
 

@@ -1,0 +1,18 @@
+{
+  "name": "bb-mcp",
+  "description": "Bitbucket Cloud PR 리뷰 도구. 개인 API 토큰으로 REST API 2.0 에 직접 붙는 MCP 서버(bb-mcp)와, 그 툴로 한국어 리뷰 코멘트를 작성하는 스킬을 담는다.",
+  "owner": {
+    "name": "adanbae-dev"
+  },
+  "plugins": [
+    {
+      "name": "bb-pr-review",
+      "source": "./plugin",
+      "description": "Bitbucket Cloud PR 리뷰용 한국어 스킬과 /bb-review 명령. MCP 서버(bb-mcp)는 별도 등록이 필요하다.",
+      "version": "0.9.0",
+      "author": {
+        "name": "adanbae-dev"
+      }
+    }
+  ]
+}

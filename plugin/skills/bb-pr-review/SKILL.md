@@ -9,6 +9,22 @@ trigger: /bb-pr-review
 Bitbucket Cloud PR을 **bb-mcp 툴로 직접 읽어** 리뷰한다.
 산출물은 `/pr-review-ko`와 동일하게 **그대로 PR에 붙일 수 있는 한국어 마크다운**이다.
 
+## 선행조건 — 없으면 아무것도 못 한다
+
+이 스킬은 **bitbucket MCP 서버(bb-mcp)가 등록돼 있어야** 동작한다.
+`bb_pr_get`·`bb_file`·`bb_comment` 등 `bb_*` 툴이 전부 그 서버에서 온다.
+
+툴이 보이지 않으면 스킬을 진행하지 말고 사용자에게 알린다.
+
+| 증상 | 원인 | 조치 |
+|---|---|---|
+| `bb_*` 툴이 아예 없음 | 서버 미등록 또는 연결 실패 | `claude mcp get bitbucket` 확인. 없으면 `setup.sh` |
+| `bb_doctor` 는 되는데 401·403 | 토큰·스코프 문제 | `bb_doctor` 가 조치 명령을 준다 |
+| `허용되지 않은 저장소` | allowlist 밖 | allowlist 파일에 추가 후 **세션 재시작** |
+
+**서버는 플러그인이 설치해 주지 않는다.** 자격증명이 머신별이고 의존성 설치가
+필요해서 `claude mcp add`(또는 `setup.sh`)로 따로 등록한다.
+
 `/pr-review-ko`와의 차이는 데이터 출처뿐이다. 그쪽은 로컬 git(`git diff`, `git show`)을
 쓰므로 저장소를 클론하고 브랜치를 fetch해야 한다. 이 스킬은 API로 받으므로
 **클론이 없어도 PR 번호만으로 리뷰가 된다.** 대신 로컬에서 실행하는 검증

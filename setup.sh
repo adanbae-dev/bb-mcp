@@ -8,6 +8,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE="bb-api-token"
+# 저장소 밖에 둔다. 저장소를 옮겨도 살아남고, 사내 저장소 이름이 git 트리 옆에 놓이지 않는다.
 ALLOWLIST="${BB_MCP_ALLOWLIST:-$HOME/.config/bb-mcp/allowed-repos}"
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
@@ -26,12 +27,20 @@ ok "node $(node -v) — $NODE_BIN"
 
 command -v claude >/dev/null || warn "claude CLI 가 없습니다. 4단계에서 명령만 출력합니다"
 
-HAVE_KEYCHAIN=0
-if command -v security >/dev/null && [ "$(uname -s)" = "Darwin" ]; then
-  HAVE_KEYCHAIN=1
+# 비밀 저장소는 OS마다 다르다. macOS 만 실측했고 나머지는 명령 존재만 확인한다.
+SECRET_BACKEND=none
+if [ "$(uname -s)" = "Darwin" ] && command -v security >/dev/null; then
+  SECRET_BACKEND=keychain
   ok "macOS 키체인 사용 가능"
+elif command -v secret-tool >/dev/null; then
+  SECRET_BACKEND=secret-tool
+  warn "secret-tool(GNOME Keyring) 을 찾았습니다 — 이 경로는 미검증입니다"
+elif command -v pass >/dev/null; then
+  SECRET_BACKEND=pass
+  warn "pass 를 찾았습니다 — 이 경로는 미검증입니다"
 else
-  warn "키체인이 없습니다. 토큰을 BITBUCKET_API_TOKEN 환경변수로 직접 넣어야 합니다"
+  warn "비밀 저장소를 찾지 못했습니다 ($(uname -s))."
+  warn "토큰이 ~/.claude.json 에 평문으로 저장됩니다."
 fi
 
 say "2/6  의존성"
@@ -53,7 +62,7 @@ HINT
 EMAIL=""; read -rp "  Atlassian 계정 이메일: " EMAIL || true
 [ -n "$EMAIL" ] || die "이메일이 필요합니다"
 
-if [ "$HAVE_KEYCHAIN" = 1 ]; then
+if [ "$SECRET_BACKEND" = keychain ]; then
   if security find-generic-password -s "$SERVICE" >/dev/null 2>&1; then
     R=""; read -rp "  키체인에 '$SERVICE' 가 이미 있습니다. 덮어쓸까요? [y/N] " R || true
     [ "${R:-N}" = "y" ] || { ok "기존 토큰 유지"; SKIP_TOKEN=1; }
@@ -90,6 +99,18 @@ if [ "$HAVE_KEYCHAIN" = 1 ]; then
     unset TOKEN BACK
   fi
   TOKEN_ENV=(--env "BITBUCKET_TOKEN_CMD=security find-generic-password -s $SERVICE -w")
+elif [ "$SECRET_BACKEND" = secret-tool ]; then
+  TOKEN=""; read -rs -p "  토큰: " TOKEN || true; echo
+  [ -n "$TOKEN" ] || die "토큰이 비어 있습니다"
+  printf '%s' "$TOKEN" | secret-tool store --label="$SERVICE" service "$SERVICE" account "$USER"
+  unset TOKEN
+  TOKEN_ENV=(--env "BITBUCKET_TOKEN_CMD=secret-tool lookup service $SERVICE account $USER")
+  warn "미검증 경로입니다. 등록 후 bb_doctor 로 토큰 형태를 확인하세요"
+elif [ "$SECRET_BACKEND" = pass ]; then
+  warn "pass 는 대화형 편집기를 띄웁니다. 아래 명령을 직접 실행한 뒤 다시 오세요:"
+  echo "    pass insert bb-mcp/api-token"
+  TOKEN_ENV=(--env "BITBUCKET_TOKEN_CMD=pass bb-mcp/api-token")
+  warn "미검증 경로입니다. 등록 후 bb_doctor 로 토큰 형태를 확인하세요"
 else
   warn "이 경로는 토큰이 ~/.claude.json 에 평문으로 저장됩니다."
   warn "설정 파일 접근 권한이 있는 주체는 토큰을 그대로 읽을 수 있습니다."

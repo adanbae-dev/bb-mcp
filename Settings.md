@@ -12,8 +12,10 @@ Atlassian 커넥터에 Jira·Confluence만 보이고 Bitbucket 툴이 없는 이
 ./setup.sh
 ```
 
-3~7장을 대신한다. 키체인 저장(128자 절단·개행→hex 회피), allowlist 파일 생성,
-`claude mcp add` 명령 조립까지 처리한다. 끝나면 세션을 재시작하고 `bb_doctor` 를 부른다.
+6단계로 3~7장과 스킬 설치를 대신한다. 비밀 저장소 감지, 토큰 저장(128자 절단·
+개행→hex 회피), allowlist 파일 생성, `claude mcp add` 명령 조립,
+`~/.claude/skills/` 에 리뷰 스킬 설치까지 처리한다.
+끝나면 세션을 재시작하고 `bb_doctor` 를 부른다.
 
 무엇이 어떻게 설정되는지 알고 싶거나, 스크립트가 실패했거나, macOS가 아니면
 아래를 손으로 따라간다.
@@ -62,6 +64,62 @@ OAuth로 Bitbucket을 지원하는 작업은 로드맵에 있다고 안내되어
 
 감사 추적이 필요한 상황이라면 이 서버는 흔적을 남기지 않으므로,
 관리자에게 Rovo 쪽 토글을 요청하는 편이 맞다.
+
+---
+
+## 2-1. 다른 환경에 설치할 때
+
+이 문서의 명령은 **macOS에서 실측한 것**이다. 다른 환경에서 달라지는 지점을 모아둔다.
+
+### 비밀 저장소
+
+`setup.sh` 가 감지해서 적절한 `BITBUCKET_TOKEN_CMD` 를 만든다.
+
+| OS | 백엔드 | `TOKEN_CMD` | 검증 |
+|---|---|---|---|
+| macOS | 키체인 | `security find-generic-password -s bb-api-token -w` | **실측** |
+| Linux (GNOME) | Secret Service | `secret-tool lookup service bb-api-token account $USER` | **미검증** |
+| Linux | pass | `pass bb-mcp/api-token` | **미검증** |
+| 그 외 | 없음 | `BITBUCKET_API_TOKEN` 평문 | — |
+
+미검증 경로는 `setup.sh` 가 경고를 띄운다. 설치 후 `bb_doctor` 로
+토큰 형태(길이·hex 여부)를 반드시 확인한다.
+
+**평문 경로는 토큰이 `~/.claude.json` 에 상주한다.** 설정 파일을 읽을 수 있는
+주체는 토큰을 그대로 얻는다(README §7 ⑨).
+
+### Node
+
+Node 18+ 가 필요하다(전역 `fetch`, `AbortSignal.timeout`).
+검증 환경은 Node 24.18 / sdk 1.30 / zod 3.
+
+`claude mcp add` 의 `command` 에 `node` 를 그대로 쓰면 PATH에 의존한다.
+GUI 실행이나 다른 노드 매니저에서 `spawn node ENOENT` 가 날 수 있다.
+`$(which node)` 로 절대 경로를 넣으면 안정적이지만, nvm 을 쓰면
+버전을 올릴 때 그 경로가 죽는다. `setup.sh` 가 nvm 경로를 감지해 경고한다.
+
+### `setup.sh` 실행 환경
+
+bash 스크립트다. Windows 에서는 WSL 이나 Git Bash 가 필요하다.
+`chmod 600` 은 POSIX 권한을 전제한다.
+
+수동으로 하려면 3~7장을 따라간다.
+
+### 경로
+
+allowlist 는 **저장소 밖**(`~/.config/bb-mcp/allowed-repos`)에 둔다.
+저장소 안에 두면 저장소를 옮길 때 깨지고, 사내 저장소 이름이 git 트리 옆에 놓인다.
+서버는 `~/` 를 확장하므로 `BITBUCKET_ALLOWED_REPOS_FILE=~/.config/...` 도 동작한다.
+
+### 첫 실행
+
+새 설치는 allowlist 가 비어 있어 **모든 저장소가 차단된다**(fail-closed).
+정상이다. `bb_doctor` 가 그 사실과 조치를 알려준다.
+저장소를 넣고 세션을 재시작하면 열린다.
+
+### Bitbucket 종류
+
+**Bitbucket Cloud 전용**이다. Server/Data Center 는 API 가 달라 동작하지 않는다.
 
 ---
 
@@ -194,7 +252,7 @@ Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
 
 ---
 
-## 5. 토큰을 키체인에 넣기
+## 5. 토큰을 비밀 저장소에 넣기 (macOS 기준)
 
 ```bash
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
@@ -318,6 +376,20 @@ MCP 서버가 어느 cwd에서 뜰지 보장되지 않는다. (`~/`는 서버가
 - **node는 절대 경로로.** nvm을 쓰면 spawn 시 PATH에 `node`가 없어
   `spawn node ENOENT`가 난다
 
+### 스킬도 같이
+
+MCP 툴은 슬래시 명령이 아니다. `/bb-pr-review` 를 쓰려면 스킬을 설치한다.
+
+```bash
+claude plugin marketplace add ./
+claude plugin install bb-pr-review@bb-mcp --scope user
+```
+
+`setup.sh` 6단계가 대신한다. 자세한 것은 [README.md §1-1](./README.md).
+
+**저장소 루트에 `.mcp.json` 을 만들지 않는다.** 프로젝트 스코프 MCP 설정으로
+읽혀서 user 스코프 등록을 덮어쓰고, 서버가 `CONNECTION_CLOSED` 로 죽는다.
+
 ### 등록 스코프 (local / project / user)
 
 토큰 스코프(§3.3)와는 다른 개념이다. 설정을 어느 범위에 저장할지의 문제다.
@@ -392,6 +464,9 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |
 | 원인을 모르겠다 | — | `bb_doctor` 먼저. 그다음 `BITBUCKET_DEBUG=true`로 재등록 후 MCP 로그 |
 | MCP 연결만 실패하고 이유가 없음 | 설정 오류 | 서버가 stderr에 원인을 남기고 exit 1 한다. 로그를 본다 |
+| `CONNECTION_CLOSED` | 프로젝트 `.mcp.json` 이 user 스코프를 덮어씀 | 저장소 루트의 `.mcp.json` 을 지운다 (§7) |
+| `/bb-pr-review` 가 `/` 목록에 없음 | 스킬 미설치 | `claude plugin list` 확인. `~/.claude/skills/` 에 있어야 로드된다 |
+| 툴은 다 되는데 슬래시 명령이 없음 | **정상** | MCP 툴은 슬래시 명령이 아니다. 스킬이 별개다 |
 
 ### 401과 403의 차이가 진단의 핵심
 
