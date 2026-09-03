@@ -124,11 +124,13 @@ fi
 say "4/6  허용 저장소"
 if [ -s "$ALLOWLIST" ] && grep -qvE '^\s*(#|$)' "$ALLOWLIST"; then
   chmod 600 "$ALLOWLIST" 2>/dev/null || true
-  ok "$ALLOWLIST 에 $(grep -cvE '^\s*(#|$)' "$ALLOWLIST")개 있음 (권한 600)"
+  # BSD grep -c 는 끝 개행이 없는 마지막 줄을 세지 않는다. awk 로 센다.
+  N_EXIST=$(awk '!/^[[:space:]]*(#|$)/{n++} END{print n+0}' "$ALLOWLIST")
+  ok "$ALLOWLIST 에 ${N_EXIST}개 있음 (권한 600)"
 else
   echo "  리뷰할 저장소를 workspace/repo 형식으로 한 줄씩. 빈 줄로 종료."
   mkdir -p "$(dirname "$ALLOWLIST")"
-  printf '# 리뷰 대상 저장소. 한 줄에 하나. `#` 이후는 주석.\n' > "$ALLOWLIST"
+  printf '# 리뷰 대상 저장소. 한 줄에 하나. `#` 이후는 주석.\n# 고친 뒤 세션을 재시작해야 반영된다.\n' > "$ALLOWLIST"
   N=0
   while true; do
     REPO=""; read -rp "  > " REPO || break
