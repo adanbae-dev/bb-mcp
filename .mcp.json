@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "bitbucket": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server.mjs"],
+      "env": {
+        "BITBUCKET_EMAIL": "${BITBUCKET_EMAIL}",
+        "BITBUCKET_TOKEN_CMD": "${BITBUCKET_TOKEN_CMD:-security find-generic-password -s bb-api-token -w}",
+        "BITBUCKET_ALLOWED_REPOS_FILE": "${BITBUCKET_ALLOWED_REPOS_FILE:-~/.config/bb-mcp/allowed-repos}",
+        "BITBUCKET_ALLOW_COMMENT": "${BITBUCKET_ALLOW_COMMENT:-false}"
+      }
+    }
+  }
+}
