@@ -102,7 +102,8 @@ fi
 # ── 4. 허용 저장소 ────────────────────────────────────────────────────
 say "4/5  허용 저장소"
 if [ -s "$ALLOWLIST" ] && grep -qvE '^\s*(#|$)' "$ALLOWLIST"; then
-  ok "$ALLOWLIST 에 $(grep -cvE '^\s*(#|$)' "$ALLOWLIST")개 있음"
+  chmod 600 "$ALLOWLIST" 2>/dev/null || true
+  ok "$ALLOWLIST 에 $(grep -cvE '^\s*(#|$)' "$ALLOWLIST")개 있음 (권한 600)"
 else
   echo "  리뷰할 저장소를 workspace/repo 형식으로 한 줄씩. 빈 줄로 종료."
   mkdir -p "$(dirname "$ALLOWLIST")"
@@ -118,7 +119,8 @@ else
     esac
   done
   [ "$N" -gt 0 ] || warn "비어 있습니다 — 모든 저장소가 차단됩니다(fail-closed)"
-  ok "$ALLOWLIST (${N}개)"
+  chmod 600 "$ALLOWLIST"
+  ok "$ALLOWLIST (${N}개, 권한 600)"
 fi
 
 # ── 5. 등록 ──────────────────────────────────────────────────────────
