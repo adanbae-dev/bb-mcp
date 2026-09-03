@@ -614,3 +614,42 @@ test("sanitizeUrlForDisplay는 URL에 박힌 자격증명을 제거한다", () =
   assert.match(withCreds, /자격증명 제거됨/);
   assert.equal(sanitizeUrlForDisplay("not a url"), "(URL로 해석 불가)");
 });
+
+// ── allowlist 조회·추가 ───────────────────────────────────────────────
+import { diffAllowlist, allowlistAppendText } from "../lib.mjs";
+
+test("diffAllowlist는 스냅샷과 파일의 차이를 알려준다", () => {
+  const d = diffAllowlist(["a/x", "a/y"], ["a/x", "a/y"]);
+  assert.equal(d.in_sync, true);
+  assert.deepEqual(d.pending, []);
+  assert.deepEqual(d.removed, []);
+
+  const added = diffAllowlist(["a/x"], ["a/x", "a/new"]);
+  assert.equal(added.in_sync, false);
+  assert.deepEqual(added.pending, ["a/new"], "파일에만 있으면 재시작 시 열린다");
+  assert.deepEqual(added.removed, []);
+
+  const gone = diffAllowlist(["a/x", "a/old"], ["a/x"]);
+  assert.equal(gone.in_sync, false);
+  assert.deepEqual(gone.removed, ["a/old"], "스냅샷에만 있으면 재시작 시 닫힌다");
+});
+
+test("diffAllowlist는 빈 입력을 견딘다", () => {
+  assert.equal(diffAllowlist([], []).in_sync, true);
+  assert.deepEqual(diffAllowlist(null, ["a/x"]).pending, ["a/x"]);
+  assert.deepEqual(diffAllowlist(["a/x"], null).removed, ["a/x"]);
+});
+
+test("allowlistAppendText는 앞 개행으로 이전 항목 오염을 막는다", () => {
+  const t = allowlistAppendText("acme/web-app", { at: new Date("2026-09-03T18:30:00Z") });
+  assert.ok(t.startsWith("\n"), "앞 개행이 없으면 이전 줄에 붙는다");
+  assert.ok(t.endsWith("\n"), "다음 추가를 위해 개행으로 끝나야 한다");
+  assert.match(t, /^\n# 2026-09-03 18:30 bb_allowlist_add\nacme\/web-app\n$/);
+});
+
+test("allowlistAppendText 결과가 파서를 통과한다", () => {
+  // 개행 없이 끝나는 파일에 붙여도 온전히 파싱돼야 한다
+  const existing = "# 헤더\nacme/old";  // 끝 개행 없음
+  const merged = existing + allowlistAppendText("acme/new");
+  assert.deepEqual(parseAllowlistFile(merged), ["acme/old", "acme/new"]);
+});

@@ -245,7 +245,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 123개 통과 확인
+npm test   # 135개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -327,7 +327,11 @@ printf '\nacme/new-repo\n' >> ~/.config/bb-mcp/allowed-repos
 ```
 
 앞의 `\n` 은 파일 마지막 줄에 개행이 없을 때 이전 항목에 붙어버리는 것을 막는다.
-빈 줄은 무시되므로 항상 붙여도 무해하다. 편집은 쉽고 반영에는 재시작이 필요한 이 조합이
+빈 줄은 무시되므로 항상 붙여도 무해하다.
+
+세션 안에서는 `/bb-repos` 로 목록을 보고 `/bb-repos add acme/new-repo` 로
+추가할 수 있다(후자는 `BITBUCKET_ALLOW_ALLOWLIST_WRITE=true` 필요).
+어느 쪽이든 **반영에는 세션 재시작이 필요하다.** 편집은 쉽고 반영에는 재시작이 필요한 이 조합이
 경계의 실체다 — 에이전트가 파일을 고쳐도 그 세션에서는 쓸 수 없다.
 
 `BITBUCKET_ALLOWLIST_RELOAD=true` 로 켜면 재시작 없이 반영되지만
@@ -423,7 +427,7 @@ claude mcp list          # ✔ Connected 확인
 claude mcp get bitbucket # 실패 시 Issue: 줄에 HTTP 상태
 ```
 
-세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **12개** 보여야 한다.
+세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **14개** 보여야 한다.
 
 `claude mcp add`는 설정만 쓰고 자격증명을 검증하지 않는다. 자격증명이 틀려도
 `add`는 성공하고 `list`에서 실패로 뜬다.
@@ -470,6 +474,7 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | 토큰을 바꿨는데 계속 401 | 토큰 캐시 | 최대 60초 대기 (`BITBUCKET_TOKEN_TTL_MS`) |
 | 서버가 죽은 뒤 복구 안 됨 | stdio는 자동 재연결 없음 | `/mcp`에서 수동 reconnect |
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |
+| `허용되지 않은 저장소` 인데 파일엔 있음 | 기동 후 파일을 고쳤다 | `bb_allowlist_list` 로 `pending_add` 확인 → 세션 재시작 |
 | 원인을 모르겠다 | — | `bb_doctor` 먼저. 그다음 `BITBUCKET_DEBUG=true`로 재등록 후 MCP 로그 |
 | MCP 연결만 실패하고 이유가 없음 | 설정 오류 | 서버가 stderr에 원인을 남기고 exit 1 한다. 로그를 본다 |
 | `CONNECTION_CLOSED` | 프로젝트 `.mcp.json` 이 user 스코프를 덮어씀 | 저장소 루트의 `.mcp.json` 을 지운다 (§7) |

@@ -15,7 +15,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
-| `plugin/commands/bb-review.md` | `/bb-review` 진입점 |
+| `plugin/commands/` | `/bb-review`, `/bb-doctor`, `/bb-repos` |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 변경 이력 |
 | `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
@@ -172,6 +172,7 @@ MCP 설정으로 읽히고, 프로젝트 스코프는 user 스코프를 덮어�
 | `BITBUCKET_ALLOWED_REPOS` | × | `workspace/repo` 쉼표 구분. 설정되면 파일보다 우선 |
 | `BITBUCKET_ALLOWED_REPOS_FILE` | × | allowlist 파일 경로. 기본 `~/.config/bb-mcp/allowed-repos` |
 | `BITBUCKET_ALLOWLIST_RELOAD` | × | `true`면 파일을 호출마다 재읽기. 기본은 기동 시 스냅샷 |
+| `BITBUCKET_ALLOW_ALLOWLIST_WRITE` | × | `true`가 아니면 `bb_allowlist_add` 차단 |
 | `BITBUCKET_ALLOW_COMMENT` | × | `true`가 아니면 `bb_comment` 차단. PR 코멘트만 열린다 |
 | `BITBUCKET_ALLOW_WRITE` | × | `true`가 아니면 `bb_write` 전면 차단. 머지·삭제까지 열린다 |
 | `BITBUCKET_TIMEOUT_MS` | × | 요청 타임아웃. 기본 30000. 양의 정수가 아니면 기동 실패 |
@@ -227,6 +228,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_file(repo, ref, path, start?, end?)` | 커밋·브랜치의 파일 전문, **줄 번호 포함** |
 | `bb_get(path, fields?)` | 위로 안 되는 경로용 범용 GET |
 | `bb_doctor(probe?)` | **설정 진단** — 토큰·인증·스코프·allowlist·게이트 |
+| `bb_allowlist_list()` | 적용 중인 허용 저장소 + 파일과의 차이 |
 
 `bb_repos`는 allowlist가 설정돼 있으면 **그 목록만** 조회한다.
 워크스페이스 전체 목록은 노출하지 않는다. allowlist가 없을 때만
@@ -255,6 +257,7 @@ PR 리뷰 중이라면 `ref`에 `bb_pr_get`의 `source_commit`을 넣는다.
 | 툴 | 게이트 | 하는 일 |
 |---|---|---|
 | `bb_comment(repo, id, body, path?, line?, side?, parent_id?)` | `ALLOW_COMMENT` | PR 코멘트 |
+| `bb_allowlist_add(repo)` | `ALLOW_ALLOWLIST_WRITE` | 허용 저장소 파일에 한 줄 추가 |
 | `bb_write(method, path, body?)` | `ALLOW_WRITE` | 범용 POST/PUT/DELETE |
 
 `bb_comment`:
@@ -423,10 +426,44 @@ BITBUCKET_ALLOWLIST_RELOAD=true
 
 모드 자체는 기동 시 고정이므로, 파일을 지운다고 `open` 모드로 뒤바뀌지 않는다.
 
-### 런타임에 넓히는 툴은 없다
+### 목록 확인과 추가
 
-allowlist를 바꾸는 MCP 툴은 일부러 만들지 않았다. 파일은 사람이 편집하고
-서버는 읽기만 한다. 서버 코드에는 파일 쓰기 호출이 아예 없다.
+```
+bb_allowlist_list()              적용 중인 목록 + 파일과의 차이
+bb_allowlist_add("acme/new")     파일에 한 줄 추가 (게이트 필요)
+```
+
+`/bb-repos` 와 `/bb-repos add acme/new` 로도 부를 수 있다.
+
+`bb_allowlist_list` 는 **기동 시 스냅샷과 현재 파일의 차이**를 보여준다.
+"추가했는데 왜 안 먹나"의 답이 여기 있다.
+
+```json
+{ "in_sync": false, "pending_add": ["acme/repo-new"],
+  "note": "파일이 기동 시점과 다릅니다. 세션을 재시작하면 반영됩니다." }
+```
+
+`bb_allowlist_add` 는 **기본 차단**이고, 켜도 **그 세션에는 반영되지 않는다.**
+파일에만 쓰고 실행 중 스냅샷은 건드리지 않는다 — 재시작 장벽이 유지된다.
+언제 무엇을 넣었는지 주석으로 파일에 남는다.
+
+```
+# 2026-09-03 18:30 bb_allowlist_add
+acme/repo-new
+```
+
+### 이 게이트는 단단한 경계가 아니다
+
+에이전트는 `Write`/`Edit` 툴로 이 파일을 직접 고칠 수 있다(§7 ②).
+그래서 `ALLOW_ALLOWLIST_WRITE` 를 끄는 것이 파일 수정을 막지는 못한다.
+게이트의 값은 셋이다.
+
+- 기본이 off라, 설정하지 않으면 경계를 넓히는 툴이 노출되지 않는다
+- 추가 흔적이 타임스탬프 주석으로 파일에 남아 사람이 알아볼 수 있다
+- 끝 개행이 없는 파일에 안전하게 덧붙인다(직접 `echo >>` 하면 이전 항목에 붙는다)
+
+**실제 경계는 여전히 재시작 장벽이다.** 파일이 어떻게 바뀌든 실행 중인 세션은
+기동 시점의 목록만 적용한다. 이건 테스트로 고정돼 있다.
 
 ## 5. 경로 가드
 
@@ -473,7 +510,7 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 123개
+npm test    # 135개
 ```
 
 - `test/lib.test.mjs` (60) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,

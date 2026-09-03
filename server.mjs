@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -31,6 +31,8 @@ import {
   capItems,
   check,
   compactRepo,
+  diffAllowlist,
+  allowlistAppendText,
   encodePathSegments,
   extractScopeInfo,
   mapLimit,
@@ -73,6 +75,10 @@ const EMAIL = requireEnv("BITBUCKET_EMAIL");
 // 리뷰만 하려면 ALLOW_COMMENT만 켠다. ALLOW_WRITE는 머지·브랜치 삭제까지 열린다.
 const ALLOW_COMMENT = process.env.BITBUCKET_ALLOW_COMMENT === "true";
 const ALLOW_WRITE = process.env.BITBUCKET_ALLOW_WRITE === "true";
+// allowlist 파일에 저장소를 추가하는 툴. 기본 차단.
+// 에이전트는 Write/Edit 로도 이 파일을 고칠 수 있으므로(README §7 ②) 이 게이트가
+// 단단한 경계는 아니다. 값은 (a) 기본이 off (b) 추가 흔적이 파일에 남는다는 것.
+const ALLOW_ALLOWLIST_WRITE = process.env.BITBUCKET_ALLOW_ALLOWLIST_WRITE === "true";
 const TIMEOUT_MS = toPositiveInt(process.env.BITBUCKET_TIMEOUT_MS, 30_000);
 const MAX_PAGES = toPositiveInt(process.env.BITBUCKET_MAX_PAGES, 10);
 // 429/5xx 재시도 횟수. 0이면 재시도하지 않는다.
@@ -324,7 +330,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.9.0" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.10.0" });
 
 // 1. 저장소 목록
 server.registerTool(
@@ -834,7 +840,120 @@ server.registerTool(
   },
 );
 
-// 11. 범용 읽기 (전용 툴로 안 되는 경로용)
+// 11. allowlist 조회
+server.registerTool(
+  "bb_allowlist_list",
+  {
+    title: "허용 저장소 목록",
+    description:
+      "지금 적용 중인 허용 저장소와 그 출처를 보여준다. 파일 모드에서 기동 후 파일이 " +
+      "바뀌었으면 그 차이(재시작하면 열릴/닫힐 저장소)도 알려준다. 읽기 전용. " +
+      "'허용되지 않은 저장소' 오류가 났을 때 먼저 부른다.",
+    inputSchema: {},
+  },
+  guard(async (_args, api) => {
+    const out = {
+      mode: ALLOWLIST.mode,
+      file: ALLOWLIST.file ?? null,
+      reload: ALLOWLIST.mode === "file" ? ALLOWLIST_RELOAD : null,
+      active: api.allowed,
+      active_count: api.allowed.length,
+    };
+
+    if (ALLOWLIST.mode === "open") {
+      out.warning = "허용 목록이 없어 제한 없이 동작합니다. 토큰 스코프 전체가 열립니다.";
+      return okJson(out);
+    }
+
+    // 파일 모드에서 스냅샷과 파일이 갈렸는지 본다
+    if (ALLOWLIST.mode === "file" && !ALLOWLIST_RELOAD) {
+      let fileEntries = null;
+      try {
+        fileEntries = readAllowlistFile();
+      } catch (e) {
+        out.file_error = e.message.split("\n")[0];
+      }
+      if (fileEntries) {
+        const d = diffAllowlist(api.allowed, fileEntries);
+        out.in_sync = d.in_sync;
+        if (!d.in_sync) {
+          out.pending_add = d.pending.length ? d.pending : undefined;
+          out.pending_remove = d.removed.length ? d.removed : undefined;
+          out.note = "파일이 기동 시점과 다릅니다. 세션을 재시작하면 반영됩니다.";
+        }
+      }
+    }
+    return okJson(out);
+  }),
+);
+
+// 12. allowlist 추가
+server.registerTool(
+  "bb_allowlist_add",
+  {
+    title: "허용 저장소 추가",
+    description:
+      "허용 저장소 파일에 workspace/repo 를 한 줄 추가한다. " +
+      "BITBUCKET_ALLOW_ALLOWLIST_WRITE=true 인 경우에만 동작하고 파일 모드에서만 쓴다. " +
+      "**추가는 이 세션에 반영되지 않는다** — 기동 시 스냅샷을 쓰므로 세션 재시작이 필요하다. " +
+      "언제 무엇을 넣었는지 주석으로 파일에 남는다.",
+    inputSchema: {
+      repo: z.string().describe("workspace/repo. 예: acme/web-app"),
+    },
+  },
+  guard(async ({ repo }, api) => {
+    if (!ALLOW_ALLOWLIST_WRITE) {
+      throw new Error(
+        "허용 저장소 추가가 비활성화됨 (BITBUCKET_ALLOW_ALLOWLIST_WRITE=true 필요).\n" +
+          "파일을 직접 고치는 것이 기본 경로입니다.",
+      );
+    }
+    if (ALLOWLIST.mode !== "file") {
+      throw new Error(
+        `파일 모드에서만 쓸 수 있습니다 (현재 ${ALLOWLIST.mode}). ` +
+          (ALLOWLIST.mode === "env"
+            ? "env 모드는 BITBUCKET_ALLOWED_REPOS 를 고쳐 재등록하세요."
+            : "BITBUCKET_ALLOWED_REPOS_FILE 을 설정하세요."),
+      );
+    }
+
+    // 형식 검증. allowlist 밖이어도 되므로 parseRepo 에 빈 배열을 준다.
+    const { full } = parseRepo(repo, []);
+
+    let fileEntries = [];
+    try {
+      fileEntries = readAllowlistFile();
+    } catch {
+      fileEntries = []; // 파일이 없거나 비었으면 새로 쓰는 것과 같다
+    }
+    if (fileEntries.includes(full)) {
+      return okJson({
+        repo: full,
+        added: false,
+        reason: "이미 파일에 있습니다",
+        active_now: api.allowed.includes(full),
+        restart_required: !api.allowed.includes(full),
+      });
+    }
+
+    appendFileSync(ALLOWLIST.file, allowlistAppendText(full), "utf8");
+    debug("allowlist 추가", full, "->", ALLOWLIST.file);
+
+    return okJson({
+      repo: full,
+      added: true,
+      file: ALLOWLIST.file,
+      file_count: fileEntries.length + 1,
+      active_count: api.allowed.length,
+      restart_required: true,
+      note:
+        "이 세션에는 반영되지 않습니다. 기동 시 스냅샷을 쓰기 때문입니다. " +
+        "세션을 재시작하면 열립니다.",
+    });
+  }),
+);
+
+// 13. 범용 읽기 (전용 툴로 안 되는 경로용)
 server.registerTool(
   "bb_get",
   {
@@ -856,7 +975,7 @@ server.registerTool(
   ),
 );
 
-// 12. 범용 쓰기 (기본 차단)
+// 14. 범용 쓰기 (기본 차단)
 server.registerTool(
   "bb_write",
   {

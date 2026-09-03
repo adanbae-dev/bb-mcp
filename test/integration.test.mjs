@@ -4,12 +4,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { parseAllowlistFile } from "../lib.mjs";
 
 const SERVER = fileURLToPath(new URL("../server.mjs", import.meta.url));
 const EMAIL = "you@example.com";
@@ -199,12 +200,13 @@ async function withFileAllowlist(initial, fn, envExtra = {}) {
   }
 }
 
-test("툴 12개가 등록된다", async () => {
+test("툴 14개가 등록된다", async () => {
   await withServer({}, async ({ client }) => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
-      "bb_comment", "bb_doctor", "bb_file", "bb_get", "bb_pr_comments", "bb_pr_diff",
-      "bb_pr_files", "bb_pr_get", "bb_pr_inbox", "bb_pr_list", "bb_repos", "bb_write",
+      "bb_allowlist_add", "bb_allowlist_list", "bb_comment", "bb_doctor", "bb_file",
+      "bb_get", "bb_pr_comments", "bb_pr_diff", "bb_pr_files", "bb_pr_get",
+      "bb_pr_inbox", "bb_pr_list", "bb_repos", "bb_write",
     ]);
   });
 });
@@ -964,4 +966,118 @@ test("allowlist 가 있으면 개방 경고를 남기지 않는다", async () =>
     const names = (await client.listTools()).tools.map((t) => t.name);
     assert.ok(names.includes("bb_doctor"));
   });
+});
+
+// ── allowlist 조회·추가 ───────────────────────────────────────────────
+
+test("bb_allowlist_list 는 적용 중인 목록과 출처를 보여준다", async () => {
+  await withFileAllowlist("acme/repo-a\nacme/repo-b\n", async ({ callTool, file }) => {
+    const out = JSON.parse((await callTool("bb_allowlist_list", {})).text);
+    assert.equal(out.mode, "file");
+    assert.equal(out.file, file);
+    assert.equal(out.reload, false);
+    assert.equal(out.active_count, 2);
+    assert.equal(out.in_sync, true);
+    assert.equal(out.pending_add, undefined);
+  });
+});
+
+test("bb_allowlist_list 는 파일이 기동 시점과 갈린 것을 알려준다", async () => {
+  await withFileAllowlist("acme/repo-a\n", async ({ callTool, writeList }) => {
+    writeList("acme/repo-a\nacme/repo-new\n");   // 실행 중 추가
+    const out = JSON.parse((await callTool("bb_allowlist_list", {})).text);
+    assert.equal(out.in_sync, false);
+    assert.deepEqual(out.pending_add, ["acme/repo-new"]);
+    assert.match(out.note, /재시작/);
+    // 실제로는 아직 막혀 있다
+    assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-new" })).isError, true);
+  });
+});
+
+test("bb_allowlist_list 는 open 모드를 경고한다", async () => {
+  await withServer(
+    { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: "" },
+    async ({ callTool }) => {
+      const out = JSON.parse((await callTool("bb_allowlist_list", {})).text);
+      assert.equal(out.mode, "open");
+      assert.match(out.warning, /제한 없이/);
+    },
+  );
+});
+
+test("bb_allowlist_add 는 기본 차단이다", async () => {
+  await withFileAllowlist("acme/repo-a\n", async ({ callTool, file }) => {
+    const before = readFileSync(file, "utf8");
+    const r = await callTool("bb_allowlist_add", { repo: "acme/repo-new" });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /BITBUCKET_ALLOW_ALLOWLIST_WRITE=true/);
+    assert.equal(readFileSync(file, "utf8"), before, "차단됐으면 파일이 안 바뀐다");
+  });
+});
+
+test("게이트를 켜면 파일에 추가하되 그 세션에는 반영하지 않는다", async () => {
+  await withFileAllowlist(
+    "acme/repo-a\n",
+    async ({ callTool, file }) => {
+      const out = JSON.parse((await callTool("bb_allowlist_add", { repo: "acme/repo-new" })).text);
+      assert.equal(out.added, true);
+      assert.equal(out.restart_required, true);
+      assert.match(out.note, /이 세션에는 반영되지 않습니다/);
+
+      // 파일에는 들어갔다
+      assert.ok(parseAllowlistFile(readFileSync(file, "utf8")).includes("acme/repo-new"));
+      // 감사 흔적이 남는다
+      assert.match(readFileSync(file, "utf8"), /# \d{4}-\d{2}-\d{2} \d{2}:\d{2} bb_allowlist_add/);
+
+      // 그러나 이 세션에서는 여전히 막혀 있다 — 스냅샷 장벽
+      assert.equal(
+        (await callTool("bb_pr_list", { repo: "acme/repo-new" })).isError, true,
+        "추가해도 그 세션에서는 못 쓴다",
+      );
+      // 기존 저장소는 계속 동작
+      assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, false);
+    },
+    { BITBUCKET_ALLOW_ALLOWLIST_WRITE: "true" },
+  );
+});
+
+test("bb_allowlist_add 는 형식과 중복을 검사한다", async () => {
+  await withFileAllowlist(
+    "acme/repo-a\n",
+    async ({ callTool }) => {
+      for (const bad of ["repo-a", "/acme/repo", "acme/a/b", "acme repo"]) {
+        assert.equal(
+          (await callTool("bb_allowlist_add", { repo: bad })).isError, true, bad,
+        );
+      }
+      const dup = JSON.parse((await callTool("bb_allowlist_add", { repo: "acme/repo-a" })).text);
+      assert.equal(dup.added, false);
+      assert.match(dup.reason, /이미/);
+    },
+    { BITBUCKET_ALLOW_ALLOWLIST_WRITE: "true" },
+  );
+});
+
+test("bb_allowlist_add 는 env·open 모드에서 거부한다", async () => {
+  await withServer(
+    { BITBUCKET_ALLOWED_REPOS: "acme/repo-a", BITBUCKET_ALLOW_ALLOWLIST_WRITE: "true" },
+    async ({ callTool }) => {
+      const r = await callTool("bb_allowlist_add", { repo: "acme/x" });
+      assert.equal(r.isError, true);
+      assert.match(r.text, /파일 모드에서만/);
+      assert.match(r.text, /BITBUCKET_ALLOWED_REPOS/);
+    },
+  );
+});
+
+test("bb_allowlist_add 는 끝 개행이 없는 파일도 오염시키지 않는다", async () => {
+  await withFileAllowlist(
+    "acme/repo-a",   // 끝 개행 없음
+    async ({ callTool, file }) => {
+      await callTool("bb_allowlist_add", { repo: "acme/repo-new" });
+      const entries = parseAllowlistFile(readFileSync(file, "utf8"));
+      assert.deepEqual(entries, ["acme/repo-a", "acme/repo-new"], "이전 항목에 붙으면 안 된다");
+    },
+    { BITBUCKET_ALLOW_ALLOWLIST_WRITE: "true" },
+  );
 });
