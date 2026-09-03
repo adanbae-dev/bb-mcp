@@ -178,29 +178,68 @@ if command -v claude >/dev/null; then
 fi
 
 # ── 6. 스킬 ──────────────────────────────────────────────────────────
+# 스킬은 두 경로 중 하나로만 설치한다. 둘 다 하면 같은 이름이 두 벌 생긴다.
+#   (a) claude plugin  — ~/.claude/plugins/cache/... 에 놓인다. 갱신·제거가 쉽다
+#   (b) 직접 복사       — ~/.claude/skills/ 에 놓인다. claude CLI 가 없어도 된다
 say "6/6  리뷰 스킬"
-SKILL_SRC="$DIR/skills/bb-pr-review"
+SKILL_SRC="$DIR/plugin/skills/bb-pr-review"
 SKILL_DST="$HOME/.claude/skills/bb-pr-review"
-if [ -d "$SKILL_SRC" ]; then
+CMD_SRC="$DIR/plugin/commands/bb-review.md"
+CMD_DST="$HOME/.claude/commands/bb-review.md"
+
+if [ ! -d "$SKILL_SRC" ]; then
+  die "$SKILL_SRC 를 찾을 수 없습니다. 저장소가 온전한지 확인하세요"
+fi
+
+# 플러그인으로 이미 깔려 있으면 복사하지 않는다 — 중복 방지
+PLUGIN_INSTALLED=0
+if command -v claude >/dev/null && claude plugin list 2>/dev/null | grep -q "bb-pr-review@"; then
+  PLUGIN_INSTALLED=1
+fi
+
+if [ "$PLUGIN_INSTALLED" = 1 ]; then
+  ok "플러그인으로 이미 설치돼 있습니다 — 복사하지 않습니다"
+  echo "    갱신: claude plugin update bb-pr-review@bb-mcp"
+elif command -v claude >/dev/null; then
+  echo "  설치 방법을 고르세요."
+  echo "    1) claude plugin  (권장 — 갱신·제거가 쉽다)"
+  echo "    2) 직접 복사       ($SKILL_DST)"
+  echo "    3) 건너뛰기"
+  CH=""; read -rp "  [1/2/3] " CH || true
+  case "${CH:-1}" in
+    1)
+      claude plugin marketplace add "$DIR" >/dev/null 2>&1         || claude plugin marketplace add ./ >/dev/null 2>&1 || true
+      if claude plugin install bb-pr-review@bb-mcp --scope user -y; then
+        ok "플러그인 설치 완료"
+      else
+        warn "플러그인 설치 실패. 2번(직접 복사)으로 다시 시도하세요"
+        warn "같은 이름의 마켓플레이스가 다른 소스로 등록돼 있으면 거부됩니다:"
+        echo "    claude plugin marketplace remove bb-mcp"
+      fi
+      ;;
+    2) COPY_SKILL=1 ;;
+    *) ok "건너뜀" ;;
+  esac
+else
+  warn "claude CLI 가 없어 직접 복사합니다"
+  COPY_SKILL=1
+fi
+
+if [ "${COPY_SKILL:-0}" = 1 ]; then
   if [ -e "$SKILL_DST" ]; then
     R=""; read -rp "  $SKILL_DST 가 이미 있습니다. 덮어쓸까요? [y/N] " R || true
-    if [ "${R:-N}" = "y" ]; then
-      cp -R "$SKILL_SRC/." "$SKILL_DST/" && ok "갱신"
-    else
-      ok "기존 스킬 유지"
-    fi
+    [ "${R:-N}" = "y" ] && { cp -R "$SKILL_SRC/." "$SKILL_DST/" && ok "갱신"; } || ok "기존 유지"
   else
     mkdir -p "$SKILL_DST"
     cp -R "$SKILL_SRC/." "$SKILL_DST/" && ok "$SKILL_DST"
   fi
-  if [ -f "$DIR/commands/bb-review.md" ]; then
-    mkdir -p "$HOME/.claude/commands"
-    cp "$DIR/commands/bb-review.md" "$HOME/.claude/commands/bb-review.md" && ok "/bb-review 명령"
+  if [ -f "$CMD_SRC" ]; then
+    mkdir -p "$(dirname "$CMD_DST")"
+    cp "$CMD_SRC" "$CMD_DST" && ok "/bb-review 명령"
   fi
-  echo "  → 다음 세션에서 /bb-pr-review 와 /bb-review 가 뜹니다"
-else
-  warn "skills/bb-pr-review 를 찾을 수 없어 건너뜁니다"
 fi
+
+echo "  → 다음 세션에서 /bb-pr-review 와 /bb-review 가 뜹니다"
 
 say "다음"
 cat <<'NEXT'
@@ -208,5 +247,5 @@ cat <<'NEXT'
   2. 세션에서 bb_doctor 를 부릅니다 — 토큰·스코프·allowlist·게이트를 한 번에 점검합니다
   3. 문제가 있으면 bb_doctor 가 실행할 명령까지 알려줍니다
 
-  저장소를 추가·삭제할 때는 allowlist 파일만 고치면 됩니다 (재시작 불필요).
+  저장소를 추가·삭제할 때는 allowlist 파일에 한 줄 넣고 세션을 재시작합니다.
 NEXT
