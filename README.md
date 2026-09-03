@@ -75,6 +75,53 @@ MCP 서버만 등록하면 툴 12개가 생기지만, **툴은 슬래시 명령�
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
 `/bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
 
+### 플러그인을 고쳤을 때 — 버전 올리는 순서
+
+**버전이 세 곳에 있고 전부 맞아야 한다.** 어긋나면
+`claude plugin update` 가 `already at the latest version` 으로 **조용히 스킵**해서
+새 코드가 설치본에 반영되지 않는다.
+
+| 파일 | 필드 |
+|---|---|
+| `package.json` | `version` |
+| `plugin/.claude-plugin/plugin.json` | `version` |
+| `.claude-plugin/marketplace.json` | `plugins[].version` |
+
+`npm test` 가 세 곳의 일치를 검사한다(`test/manifest.test.mjs`). 잊으면 테스트가 깨진다.
+
+순서:
+
+```bash
+# 1. 세 곳을 같은 값으로
+npm pkg set version=0.11.0
+#    plugin/.claude-plugin/plugin.json  → "version": "0.11.0"
+#    .claude-plugin/marketplace.json    → plugins[0].version: "0.11.0"
+
+# 2. 검증
+npm test                          # 버전 일치 + 나머지 전부
+claude plugin validate ./plugin
+claude plugin validate .
+
+# 3. 원격에 올린다 — 마켓플레이스가 git 을 읽으므로 푸시가 먼저다
+git commit -am "..." && git push
+
+# 4. 마켓플레이스 캐시부터 갱신. 이걸 빼면 옛 매니페스트를 본다
+claude plugin marketplace update bb-mcp
+
+# 5. 플러그인 갱신
+claude plugin update bb-pr-review@bb-mcp
+#    ✔ updated from 0.10.0 to 0.11.0. Restart to apply changes.
+
+# 6. 세션 재시작
+```
+
+**3번(푸시)이 4번보다 먼저**여야 한다. GitHub 소스 마켓플레이스는 원격 git 을
+읽으므로, 푸시하지 않은 커밋은 보이지 않는다. 로컬 경로(`add ./`)로 등록했으면
+푸시 없이도 되지만, 그때도 `marketplace update` 는 필요하다.
+
+`claude plugin tag` 는 `{name}--v{version}` git 태그를 만들면서
+`plugin.json` 과 마켓플레이스 항목이 일치하는지 검증한다(`package.json` 은 안 본다).
+
 ### 서버와 스킬은 별개다 — 순서는 무관
 
 두 가지를 각각 설치한다. **순서는 상관없다**(스킬은 실행 시점에 툴이 있으면 된다).
@@ -510,12 +557,14 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 135개
+npm test    # 139개
 ```
 
 - `test/lib.test.mjs` (60) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
   diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
+- `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
+  플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
 - `test/integration.test.mjs` (44) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   스냅샷/재읽기·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,

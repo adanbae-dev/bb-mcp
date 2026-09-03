@@ -245,7 +245,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 135개 통과 확인
+npm test   # 139개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -397,6 +397,10 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 한 마켓플레이스 이름에 소스는 하나이므로 갈아탈 때는
 `marketplace remove bb-mcp` 를 먼저 한다.
 
+갱신은 `marketplace update` → `plugin update` 순서다.
+플러그인을 고쳤다면 버전을 세 곳에 맞춰야 한다
+([README.md §1-1](./README.md) "버전 올리는 순서").
+
 `setup.sh` 6단계가 대신한다. 자세한 것은 [README.md §1-1](./README.md).
 
 **저장소 루트에 `.mcp.json` 을 만들지 않는다.** 프로젝트 스코프 MCP 설정으로
@@ -479,6 +483,8 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | MCP 연결만 실패하고 이유가 없음 | 설정 오류 | 서버가 stderr에 원인을 남기고 exit 1 한다. 로그를 본다 |
 | `CONNECTION_CLOSED` | 프로젝트 `.mcp.json` 이 user 스코프를 덮어씀 | 저장소 루트의 `.mcp.json` 을 지운다 (§7) |
 | `/bb-pr-review` 가 `/` 목록에 없음 | 스킬 미설치 | `claude plugin list` 확인. `~/.claude/skills/` 에 있어야 로드된다 |
+| `plugin update` 가 `already at the latest version` | 버전을 안 올렸다 | 세 곳을 맞춘다. `npm test` 가 검사한다 |
+| 버전을 올렸는데도 옛 코드 | 마켓플레이스 캐시 | `claude plugin marketplace update bb-mcp` 먼저 |
 | 툴은 다 되는데 슬래시 명령이 없음 | **정상** | MCP 툴은 슬래시 명령이 아니다. 스킬이 별개다 |
 
 ### 401과 403의 차이가 진단의 핵심

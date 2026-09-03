@@ -16,7 +16,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test ./test/lib.test.mjs ./test/integration.test.mjs"
+    "test": "node --test ./test/lib.test.mjs ./test/integration.test.mjs ./test/manifest.test.mjs"
   },
   "keywords": [
     "mcp",
