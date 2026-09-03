@@ -41,7 +41,8 @@ security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
 
 # 허용 저장소
 mkdir -p ~/.config/bb-mcp
-echo 'workspace/repo' > ~/.config/bb-mcp/allowed-repos
+printf 'workspace/repo\n' > ~/.config/bb-mcp/allowed-repos
+chmod 600 ~/.config/bb-mcp/allowed-repos
 
 # 등록
 claude mcp add --scope user \
@@ -216,6 +217,15 @@ chmod 600 ~/.config/bb-mcp/allowed-repos
 
 목록은 **기동 시 한 번 읽는다.** 저장소를 추가하려면 파일에 한 줄 넣고
 세션을 재시작한다. 편집은 쉽고, 반영에는 재시작이 필요하다 — 이 조합이 핵심이다.
+
+```bash
+printf '\nacme/new-repo\n' >> ~/.config/bb-mcp/allowed-repos
+```
+
+**앞의 `\n` 이 중요하다.** 파일 마지막 줄에 개행이 없으면 `echo 'x' >>` 가
+이전 항목에 그대로 붙어 `acme/lastacme/new-repo` 같은 줄을 만든다.
+파서가 줄 번호와 함께 거부하므로 조용히 깨지지는 않지만, 빈 줄은 무시되니
+`\n` 을 앞에 붙이는 습관이 안전하다.
 
 에이전트는 `Write`/`Edit` 툴을 갖고 있어 allowlist 파일을 고칠 수 있다.
 막을 수 없다. 하지만 **고쳐도 그 세션에서는 쓸 수 없다.** 하이재킹된 에이전트가
