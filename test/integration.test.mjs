@@ -785,3 +785,26 @@ test("bb_doctor는 읽기 전용이다 (게이트가 꺼져도 동작)", async (
     assert.equal(seen.posted.length, 0, "어떤 쓰기도 하지 않는다");
   });
 });
+
+test("bb_doctor는 계정 이메일 전문을 노출하지 않는다", async () => {
+  await withServer({ BITBUCKET_EMAIL: "confidential.person@company.co.kr" }, async ({ callTool }) => {
+    const text = (await callTool("bb_doctor", { probe: false })).text;
+    assert.ok(!text.includes("confidential.person"), "로컬 파트가 노출됐다");
+    assert.ok(!text.includes("onfidential"), "로컬 파트 일부가 노출됐다");
+    // 도메인은 오설정 판별에 필요하므로 남는다
+    assert.match(text, /@company\.co\.kr/);
+  });
+});
+
+test("bb_doctor는 API 베이스에 박힌 자격증명을 노출하지 않는다", async () => {
+  // 실제로 붙지는 않지만 출력 위생만 확인한다
+  await withServer(
+    { BITBUCKET_API_BASE: "http://someuser:s3cretpw@127.0.0.1:1/2.0" },
+    async ({ callTool }) => {
+      const text = (await callTool("bb_doctor", { probe: false })).text;
+      assert.ok(!text.includes("s3cretpw"), "비밀번호가 노출됐다");
+      assert.ok(!text.includes("someuser"), "사용자명이 노출됐다");
+      assert.match(text, /자격증명 제거됨/);
+    },
+  );
+});

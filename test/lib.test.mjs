@@ -582,3 +582,35 @@ test("scopeProblems는 부족한 스코프와 못 쓰는 툴을 짝지어 준다
 
   assert.deepEqual(scopeProblems(null), [], "목록을 못 얻으면 판정하지 않는다");
 });
+
+// ── 진단 출력 위생 ────────────────────────────────────────────────────
+import { maskEmail, sanitizeUrlForDisplay } from "../lib.mjs";
+
+test("maskEmail은 로컬 파트를 가리고 도메인은 남긴다", () => {
+  assert.equal(maskEmail("someone@company.co.kr"), "s******@company.co.kr");
+  assert.equal(maskEmail("ab@x.com"), "a*@x.com".replace("a*", "a**"));
+  assert.equal(maskEmail("a@x.com"), "a**@x.com", "한 글자도 길이를 추정할 수 없게");
+  assert.equal(maskEmail("no-at-sign"), "(형식 아님)");
+  assert.equal(maskEmail(""), "(형식 아님)");
+  assert.equal(maskEmail(undefined), "(형식 아님)");
+});
+
+test("maskEmail은 로컬 파트 원문을 남기지 않는다", () => {
+  const email = "verylongname@company.com";
+  const masked = maskEmail(email);
+  assert.ok(!masked.includes("verylongname"));
+  assert.ok(!masked.includes("erylongname"));
+  assert.ok(masked.endsWith("@company.com"), "도메인은 오설정 판별에 필요하다");
+});
+
+test("sanitizeUrlForDisplay는 URL에 박힌 자격증명을 제거한다", () => {
+  assert.equal(
+    sanitizeUrlForDisplay("https://api.bitbucket.org/2.0"),
+    "https://api.bitbucket.org/2.0",
+  );
+  const withCreds = sanitizeUrlForDisplay("https://user:s3cret@evil.example/2.0");
+  assert.ok(!withCreds.includes("s3cret"), "비밀번호가 남으면 안 된다");
+  assert.ok(!withCreds.includes("user"), "사용자명도 남기지 않는다");
+  assert.match(withCreds, /자격증명 제거됨/);
+  assert.equal(sanitizeUrlForDisplay("not a url"), "(URL로 해석 불가)");
+});

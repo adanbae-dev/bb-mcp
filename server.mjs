@@ -43,6 +43,8 @@ import {
   resolveApiUrl,
   scopeProblems,
   shouldRetry,
+  maskEmail,
+  sanitizeUrlForDisplay,
   tokenProblems,
   tokenSummary,
   tokenizeCmd,
@@ -58,7 +60,7 @@ const API = (process.env.BITBUCKET_API_BASE ?? DEFAULT_API).replace(/\/+$/, "");
 // 테스트 이음새이지 운영 설정이 아니므로, 기본값이 아니면 크게 알린다.
 if (API !== DEFAULT_API) {
   process.stderr.write(
-    `[bb-mcp] 경고: BITBUCKET_API_BASE 가 기본값이 아닙니다 -> ${API}\n` +
+    `[bb-mcp] 경고: BITBUCKET_API_BASE 가 기본값이 아닙니다 -> ${sanitizeUrlForDisplay(API)}\n` +
       "  이 호스트로 Bitbucket 토큰이 Basic 인증 헤더로 전송됩니다.\n" +
       "  테스트용 이음새입니다. 운영 설정에서는 지우세요.\n",
   );
@@ -286,7 +288,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.7.0" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.7.1" });
 
 // 1. 저장소 목록
 server.registerTool(
@@ -685,7 +687,7 @@ server.registerTool(
     };
 
     // ── 설정 ──
-    add(check(true, "이메일", EMAIL));
+    add(check(true, "이메일", maskEmail(EMAIL)));
     const tokenSource = process.env.BITBUCKET_TOKEN_CMD
       ? "BITBUCKET_TOKEN_CMD"
       : process.env.BITBUCKET_API_TOKEN
@@ -694,8 +696,8 @@ server.registerTool(
     add(check(tokenSource !== "(없음)", "토큰 소스", tokenSource));
     add(
       API === DEFAULT_API
-        ? check(true, "API 베이스", API)
-        : check(false, "API 베이스", `기본값이 아닙니다 -> ${API}. 이 호스트로 토큰이 전송됩니다`,
+        ? check(true, "API 베이스", sanitizeUrlForDisplay(API))
+        : check(false, "API 베이스", `기본값이 아닙니다 -> ${sanitizeUrlForDisplay(API)}. 이 호스트로 토큰이 전송됩니다`,
             "운영 설정에서 BITBUCKET_API_BASE 를 지우세요"),
     );
 

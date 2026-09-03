@@ -77,6 +77,8 @@ if [ "$HAVE_KEYCHAIN" = 1 ]; then
 
     # -w 뒤에 값을 직접 준다. 대화형 프롬프트는 128자에서 자른다.
     # (값이 잠시 argv 에 노출된다 — 같은 머신의 다른 프로세스가 볼 수 있다)
+    # -w 뒤에 값을 직접 준다. 대화형 프롬프트는 128자에서 자른다.
+    # 값이 잠시 argv 에 노출된다 — 같은 머신의 다른 프로세스가 ps 로 볼 수 있다.
     security add-generic-password -U -s "$SERVICE" -a "$USER" -w "$TOKEN"
 
     BACK="$(security find-generic-password -s "$SERVICE" -w)"
@@ -89,8 +91,12 @@ if [ "$HAVE_KEYCHAIN" = 1 ]; then
   fi
   TOKEN_ENV=(--env "BITBUCKET_TOKEN_CMD=security find-generic-password -s $SERVICE -w")
 else
-  TOKEN=""; read -rs -p "  토큰 (환경변수로 저장됩니다): " TOKEN || true; echo
+  warn "이 경로는 토큰이 ~/.claude.json 에 평문으로 저장됩니다."
+  warn "설정 파일 접근 권한이 있는 주체는 토큰을 그대로 읽을 수 있습니다."
+  TOKEN=""; read -rs -p "  토큰 (평문 저장됩니다): " TOKEN || true; echo
+  [ -n "$TOKEN" ] || die "토큰이 비어 있습니다"
   TOKEN_ENV=(--env "BITBUCKET_API_TOKEN=$TOKEN")
+  unset TOKEN
 fi
 
 # ── 4. 허용 저장소 ────────────────────────────────────────────────────
@@ -128,7 +134,15 @@ CMD=(claude mcp add --scope user
   --transport stdio bitbucket -- "$NODE_BIN" "$DIR/server.mjs")
 
 echo
-printf '  '; printf '%q ' "${CMD[@]}"; echo; echo
+# 화면·스크롤백에 토큰이 남지 않게 출력용 복사본에서 가린다
+SHOWN=()
+for A in "${CMD[@]}"; do
+  case "$A" in
+    BITBUCKET_API_TOKEN=*) SHOWN+=("BITBUCKET_API_TOKEN=<가림>") ;;
+    *) SHOWN+=("$A") ;;
+  esac
+done
+printf '  '; printf '%q ' "${SHOWN[@]}"; echo; echo
 
 if command -v claude >/dev/null; then
   R=""; read -rp "  실행할까요? (기존 'bitbucket' 등록은 교체됩니다) [y/N] " R || true

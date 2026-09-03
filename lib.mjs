@@ -481,3 +481,30 @@ export function scopeProblems(granted) {
       : check(false, scope, `없음 → ${tools.join(", ")} 사용 불가`, "토큰을 이 스코프를 포함해 재발급하세요"),
   );
 }
+
+// ── 진단 출력 위생 ────────────────────────────────────────────────────
+// bb_doctor 결과는 모델 컨텍스트로 들어가고, 하이재킹된 에이전트가
+// bb_comment 로 내보낼 수 있다(README §7 ①). 진단에 필요한 최소만 남긴다.
+
+// 이메일은 Basic 인증의 사용자명이다. 도메인은 오설정 판별에 필요하므로 남기고
+// 로컬 파트는 첫 글자만 남긴다.
+export function maskEmail(email) {
+  if (typeof email !== "string" || !email.includes("@")) return "(형식 아님)";
+  const [local, ...rest] = email.split("@");
+  const domain = rest.join("@");
+  if (!local || !domain) return "(형식 아님)";
+  return `${local[0]}${"*".repeat(Math.max(2, local.length - 1))}@${domain}`;
+}
+
+// URL에 userinfo(user:pass@)가 박혀 있으면 그대로 찍히면 안 된다.
+export function sanitizeUrlForDisplay(raw) {
+  try {
+    const u = new URL(raw);
+    const hadCreds = Boolean(u.username || u.password);
+    u.username = "";
+    u.password = "";
+    return hadCreds ? `${u.origin}${u.pathname} (자격증명 제거됨)` : `${u.origin}${u.pathname}`;
+  } catch {
+    return "(URL로 해석 불가)";
+  }
+}
