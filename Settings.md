@@ -6,6 +6,18 @@ Atlassian 커넥터에 Jira·Confluence만 보이고 Bitbucket 툴이 없는 이
 서버 자체의 툴 레퍼런스와 경계 설계는 [README.md](./README.md)에 있다.
 이 문서는 **설정 절차와 트러블슈팅**을 다룬다.
 
+## 0. 빠른 길
+
+```bash
+./setup.sh
+```
+
+3~7장을 대신한다. 키체인 저장(128자 절단·개행→hex 회피), allowlist 파일 생성,
+`claude mcp add` 명령 조립까지 처리한다. 끝나면 세션을 재시작하고 `bb_doctor` 를 부른다.
+
+무엇이 어떻게 설정되는지 알고 싶거나, 스크립트가 실패했거나, macOS가 아니면
+아래를 손으로 따라간다.
+
 ---
 
 ## 1. 왜 Bitbucket 툴이 안 보이는가
@@ -171,7 +183,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 96개 통과 확인
+npm test   # 107개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -322,17 +334,34 @@ claude mcp list          # ✔ Connected 확인
 claude mcp get bitbucket # 실패 시 Issue: 줄에 HTTP 상태
 ```
 
-세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **11개** 보여야 한다.
+세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **12개** 보여야 한다.
 
 `claude mcp add`는 설정만 쓰고 자격증명을 검증하지 않는다. 자격증명이 틀려도
 `add`는 성공하고 `list`에서 실패로 뜬다.
 
-세션에서 첫 확인은 `bb_repos`(인자 없이)가 좋다. allowlist 소스와 파일 경로,
-각 저장소 메타데이터를 한 번에 돌려준다.
+세션에서 첫 확인은 **`bb_doctor`** 다. 토큰 형태·인증·스코프·allowlist·게이트를
+한 번에 점검하고, 문제가 있으면 실행할 명령까지 알려준다.
+
+```
+bb_doctor()
+→ ok: false, 문제 1건
+  ✖ write:pullrequest:bitbucket: 없음 → bb_comment 사용 불가
+     fix: 토큰을 이 스코프를 포함해 재발급하세요
+```
+
+토큰 값은 어떤 형태로도 출력되지 않는다(접두사조차 담지 않는다).
+allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알 수 있다.
+
+이후 실제 데이터 확인은 `bb_repos`(인자 없이)로 한다.
 
 ---
 
 ## 9. 트러블슈팅
+
+### 먼저 bb_doctor
+
+증상별 표를 보기 전에 `bb_doctor` 를 부른다. 아래 대부분을 자동으로 판정하고
+조치 명령까지 준다. 세션이 아예 안 붙어서 툴을 못 부르는 경우에만 표를 본다.
 
 ### 증상별
 
@@ -352,7 +381,7 @@ claude mcp get bitbucket # 실패 시 Issue: 줄에 HTTP 상태
 | 토큰을 바꿨는데 계속 401 | 토큰 캐시 | 최대 60초 대기 (`BITBUCKET_TOKEN_TTL_MS`) |
 | 서버가 죽은 뒤 복구 안 됨 | stdio는 자동 재연결 없음 | `/mcp`에서 수동 reconnect |
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |
-| 원인을 모르겠다 | — | `BITBUCKET_DEBUG=true`로 재등록 후 MCP 로그 확인 |
+| 원인을 모르겠다 | — | `bb_doctor` 먼저. 그다음 `BITBUCKET_DEBUG=true`로 재등록 후 MCP 로그 |
 | MCP 연결만 실패하고 이유가 없음 | 설정 오류 | 서버가 stderr에 원인을 남기고 exit 1 한다. 로그를 본다 |
 
 ### 401과 403의 차이가 진단의 핵심
@@ -404,6 +433,7 @@ stderr(= Claude Code의 MCP 로그)에 요청·상태·소요시간·재시도�
 ## 10. 리뷰 한 바퀴
 
 ```
+bb_doctor()                             설정 점검 (처음 한 번, 그리고 막힐 때)
 bb_pr_inbox()                           어디에 뭐가 열려 있나 (allowlist 전체)
 bb_pr_get(repo, id)                     의도·범위 파악 → source_commit 확보
 bb_pr_files(repo, id)                   어디를 볼지 정하기

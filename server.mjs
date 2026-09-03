@@ -29,8 +29,10 @@ import {
   compactPr,
   compactPrSummary,
   capItems,
+  check,
   compactRepo,
   encodePathSegments,
+  extractScopeInfo,
   mapLimit,
   numberLines,
   parseAllowlistFile,
@@ -39,7 +41,10 @@ import {
   pick,
   prId,
   resolveApiUrl,
+  scopeProblems,
   shouldRetry,
+  tokenProblems,
+  tokenSummary,
   tokenizeCmd,
   truncateDiff,
   TRUNCATE_HINT,
@@ -230,8 +235,8 @@ async function rawCall(method, reqPath, body, { accept = "application/json", all
 
 // 툴 호출 한 번에 대한 컨텍스트. allowlist를 진입 시점에 한 번만 확정해
 // 페이지네이션 중간에 파일이 바뀌어도 한 호출 안에서는 일관되게 판정한다.
-function makeApi() {
-  const allowed = resolveAllowedRepos();
+function makeApi(allowedOverride) {
+  const allowed = allowedOverride ?? resolveAllowedRepos();
 
   const call = (method, p, body, opts = {}) => rawCall(method, p, body, { ...opts, allowed });
 
@@ -281,7 +286,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.6.0" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.7.0" });
 
 // 1. 저장소 목록
 server.registerTool(
@@ -650,7 +655,136 @@ server.registerTool(
   }),
 );
 
-// 10. 범용 읽기 (전용 툴로 안 되는 경로용)
+// 10. 자기 진단
+server.registerTool(
+  "bb_doctor",
+  {
+    title: "설정 진단",
+    description:
+      "설정이 제대로 됐는지 점검한다. 토큰 형태·인증·스코프·allowlist·게이트를 확인하고, " +
+      "문제가 있으면 실행할 명령까지 알려준다. 읽기 전용이며 토큰 값은 어떤 형태로도 출력하지 않는다. " +
+      "401·403이 나거나 툴이 안 먹을 때 가장 먼저 부른다.",
+    inputSchema: {
+      probe: z
+        .boolean()
+        .optional()
+        .describe("false면 네트워크 호출 없이 설정만 검사. 기본 true"),
+    },
+  },
+  // guard() 는 진입 시 allowlist를 해석하므로, allowlist가 깨져 있으면
+  // 진단 툴 자체가 못 뜬다 — 정작 진단이 필요한 상황이다.
+  // 그래서 여기서는 직접 해석하고, 실패하면 그것을 문제로 보고한 뒤
+  // 네트워크 검사를 건너뛴다 (allowed 를 [] 로 두면 open 모드가 되어 위험하다).
+  async ({ probe = true }) => {
+   try {
+    const checks = [];
+    const problems = [];
+    const add = (c) => {
+      checks.push(c);
+      if (!c.ok) problems.push(c);
+    };
+
+    // ── 설정 ──
+    add(check(true, "이메일", EMAIL));
+    const tokenSource = process.env.BITBUCKET_TOKEN_CMD
+      ? "BITBUCKET_TOKEN_CMD"
+      : process.env.BITBUCKET_API_TOKEN
+        ? "BITBUCKET_API_TOKEN (평문)"
+        : "(없음)";
+    add(check(tokenSource !== "(없음)", "토큰 소스", tokenSource));
+    add(
+      API === DEFAULT_API
+        ? check(true, "API 베이스", API)
+        : check(false, "API 베이스", `기본값이 아닙니다 -> ${API}. 이 호스트로 토큰이 전송됩니다`,
+            "운영 설정에서 BITBUCKET_API_BASE 를 지우세요"),
+    );
+
+    // ── 토큰 형태 (값은 노출하지 않는다) ──
+    let summary = { present: false };
+    try {
+      summary = tokenSummary(getToken());
+    } catch (e) {
+      add(check(false, "토큰", e.message.split("\n")[0], "Settings.md §5 를 확인하세요"));
+    }
+    if (summary.present) tokenProblems(summary).forEach(add);
+
+    // ── allowlist ──
+    let allowed = null;
+    if (ALLOWLIST.mode === "open") {
+      allowed = [];
+      add(check(true, "allowlist", "없음 (open) — 접근 범위가 토큰 스코프 전체입니다"));
+    } else {
+      add(check(true, "allowlist 소스", `${ALLOWLIST.mode}${ALLOWLIST.file ? ` (${ALLOWLIST.file})` : ""}`));
+      try {
+        allowed = resolveAllowedRepos();
+        add(check(allowed.length > 0, "허용 저장소", `${allowed.length}개: ${allowed.join(", ")}`));
+      } catch (e) {
+        add(check(false, "허용 저장소", e.message.split("\n")[0],
+          "파일에 workspace/repo 를 한 줄씩 적으세요 (주석만 있으면 전체 차단입니다)"));
+      }
+    }
+
+    // ── 게이트 ──
+    add(check(true, "bb_comment", ALLOW_COMMENT ? "허용 (ALLOW_COMMENT=true)" : "차단"));
+    add(check(true, "bb_write", ALLOW_WRITE ? "허용 (ALLOW_WRITE=true) — 머지·삭제 가능" : "차단"));
+
+    // ── 실제 호출 ──
+    let scopes = null;
+    if (probe && !summary.present) {
+      add(check(false, "네트워크 검사", "토큰을 못 읽어 건너뜀"));
+    } else if (probe && allowed === null) {
+      add(check(false, "네트워크 검사", "allowlist가 깨져 건너뜀 — 위 문제를 먼저 고치세요"));
+    } else if (probe) {
+      const api = makeApi(allowed);
+      // /user 는 가드가 허용하는 경로다. 403이면 본문에 granted 목록이 온다.
+      try {
+        await api.call("GET", "/user");
+        add(check(true, "인증", "200 (read:user 보유). 스코프 목록은 확인 불가"));
+      } catch (e) {
+        const msg = e.message;
+        if (msg.startsWith("401")) {
+          add(check(false, "인증", "401 — 자격증명이 거부됐습니다",
+            "이메일이 맞는지, 토큰이 잘리거나 hex로 저장되지 않았는지 확인 (Settings.md §9)"));
+        } else if (msg.startsWith("403")) {
+          const info = extractScopeInfo(msg.slice(msg.indexOf("\n") + 1));
+          scopes = info.granted;
+          add(check(true, "인증", "403 — 인증 성공, read:user 만 없음 (정상)"));
+        } else {
+          add(check(false, "인증", msg.split("\n")[0]));
+        }
+      }
+
+      if (scopes) scopeProblems(scopes).forEach(add);
+
+      // 허용 저장소 하나를 실제로 읽어본다
+      if (api.allowed.length) {
+        const target = api.allowed[0];
+        try {
+          await api.getJson(`/repositories/${target}`);
+          add(check(true, "저장소 접근", `${target} → 200`));
+        } catch (e) {
+          add(check(false, "저장소 접근", `${target} → ${e.message.split("\n")[0]}`,
+            "저장소 이름이 맞는지, read:repository 스코프가 있는지 확인"));
+        }
+      }
+    }
+
+    return okJson({
+      ok: problems.length === 0,
+      problem_count: problems.length,
+      checks,
+      problems: problems.length ? problems : undefined,
+      next: problems.length
+        ? "위 problems 의 fix 를 실행한 뒤 다시 진단하세요. 코드·설정을 바꿨으면 세션 재시작이 필요합니다."
+        : "설정에 문제가 없습니다.",
+    });
+   } catch (e) {
+    return fail(e);
+   }
+  },
+);
+
+// 11. 범용 읽기 (전용 툴로 안 되는 경로용)
 server.registerTool(
   "bb_get",
   {
@@ -672,7 +806,7 @@ server.registerTool(
   ),
 );
 
-// 11. 범용 쓰기 (기본 차단)
+// 12. 범용 쓰기 (기본 차단)
 server.registerTool(
   "bb_write",
   {

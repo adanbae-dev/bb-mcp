@@ -198,11 +198,11 @@ async function withFileAllowlist(initial, fn, envExtra = {}) {
   }
 }
 
-test("툴 11개가 등록된다", async () => {
+test("툴 12개가 등록된다", async () => {
   await withServer({}, async ({ client }) => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
-      "bb_comment", "bb_file", "bb_get", "bb_pr_comments", "bb_pr_diff",
+      "bb_comment", "bb_doctor", "bb_file", "bb_get", "bb_pr_comments", "bb_pr_diff",
       "bb_pr_files", "bb_pr_get", "bb_pr_inbox", "bb_pr_list", "bb_repos", "bb_write",
     ]);
   });
@@ -715,5 +715,73 @@ test("bb_pr_inbox는 동시 요청 수를 제한한다", async () => {
     await callTool("bb_pr_inbox", {});
     assert.ok(seen.peakConcurrent <= 6, `동시 요청 최대 ${seen.peakConcurrent} (6 이하)`);
     assert.ok(seen.peakConcurrent > 1, "그래도 병렬로 돌아야 한다");
+  });
+});
+
+// ── bb_doctor ─────────────────────────────────────────────────────────
+
+test("bb_doctor는 정상 설정을 통과시킨다", async () => {
+  await withServer({ BITBUCKET_ALLOW_COMMENT: "true" }, async ({ callTool }) => {
+    const out = JSON.parse((await callTool("bb_doctor", {})).text);
+    // 가짜 API는 /user 에 라우트가 없어 404를 낸다 → 인증 항목만 실패
+    const labels = out.checks.map((c) => c.label);
+    assert.ok(labels.includes("이메일"));
+    assert.ok(labels.includes("허용 저장소"));
+    assert.ok(labels.includes("bb_comment"));
+    assert.ok(labels.includes("저장소 접근"));
+    const gate = out.checks.find((c) => c.label === "bb_comment");
+    assert.match(gate.detail, /허용/);
+  });
+});
+
+test("bb_doctor는 토큰 값을 절대 출력하지 않는다", async () => {
+  const real = "ATATT" + "x3FfGF0T".repeat(23) + "abc";
+  await withServer({ BITBUCKET_API_TOKEN: real }, async ({ callTool }) => {
+    const text = (await callTool("bb_doctor", {})).text;
+    assert.ok(!text.includes(real), "토큰 전체가 노출됐다");
+    assert.ok(!text.includes(real.slice(0, 20)), "토큰 앞부분이 노출됐다");
+    assert.ok(!text.includes("ATATT"), "접두사가 노출됐다");
+    // 그래도 형태 판정은 되어 있다
+    assert.match(text, /192자/);
+  });
+});
+
+test("bb_doctor는 hex 토큰을 잡아내고 조치를 알려준다", async () => {
+  const hex = Buffer.from("ATATT" + "x3FfGF0T".repeat(23) + "\n", "utf8").toString("hex");
+  await withServer({ BITBUCKET_API_TOKEN: hex }, async ({ callTool }) => {
+    const out = JSON.parse((await callTool("bb_doctor", {})).text);
+    assert.equal(out.ok, false);
+    const p = out.problems.find((x) => x.label === "토큰 형태");
+    assert.ok(p, "토큰 형태 문제를 잡아야 한다");
+    assert.match(p.detail, /hex/);
+    assert.match(p.fix, /add-generic-password/);
+    assert.ok(!JSON.stringify(out).includes(hex), "hex 값도 노출하면 안 된다");
+  });
+});
+
+test("bb_doctor는 빈 allowlist를 문제로 보고한다", async () => {
+  await withFileAllowlist("# 주석만\n", async ({ callTool }) => {
+    const out = JSON.parse((await callTool("bb_doctor", {})).text);
+    assert.equal(out.ok, false);
+    // allowlist 해석 자체가 실패하므로 오류로 떨어진다
+    assert.ok(out.problems.length > 0);
+  });
+});
+
+test("bb_doctor는 probe=false 면 네트워크를 쓰지 않는다", async () => {
+  await withServer({}, async ({ callTool, seen }) => {
+    const before = seen.requests.length;
+    const out = JSON.parse((await callTool("bb_doctor", { probe: false })).text);
+    assert.equal(seen.requests.length, before, "네트워크 호출이 있으면 안 된다");
+    assert.ok(out.checks.some((c) => c.label === "토큰 형태"));
+    assert.ok(!out.checks.some((c) => c.label === "인증"), "인증 검사는 건너뛴다");
+  });
+});
+
+test("bb_doctor는 읽기 전용이다 (게이트가 꺼져도 동작)", async () => {
+  await withServer({}, async ({ callTool, seen }) => {
+    const r = await callTool("bb_doctor", { probe: false });
+    assert.equal(r.isError, false, "쓰기 게이트와 무관하게 동작해야 한다");
+    assert.equal(seen.posted.length, 0, "어떤 쓰기도 하지 않는다");
   });
 });

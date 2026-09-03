@@ -493,3 +493,92 @@ test("capItems: 바이트 예산을 넘으면 자르고 개수를 알려준다",
   assert.deepEqual(capItems(items, 10_000_000), { items, dropped: 0 });
   assert.deepEqual(capItems([], 100), { items: [], dropped: 0 });
 });
+
+// ── 자기 진단 ─────────────────────────────────────────────────────────
+import { tokenSummary, extractScopeInfo, tokenProblems, scopeProblems } from "../lib.mjs";
+
+const REAL_SHAPE = "ATATT" + "x3FfGF0T".repeat(23) + "abc"; // 192자
+
+test("tokenSummary는 토큰 값을 어떤 형태로도 담지 않는다", () => {
+  const s = tokenSummary(REAL_SHAPE);
+  const dump = JSON.stringify(s);
+  assert.ok(!dump.includes(REAL_SHAPE), "전체 값이 들어가면 안 된다");
+  // 접두사조차 담지 않는다 — boolean 으로만 판정한다
+  assert.ok(!dump.includes("ATATT"), "접두사도 담지 않는다");
+  assert.ok(!dump.includes(REAL_SHAPE.slice(0, 4)), "앞 4자도 담지 않는다");
+  assert.deepEqual(Object.keys(s).sort(), [
+    "length", "looks_atlassian", "looks_hex", "maybe_truncated", "present",
+  ]);
+});
+
+test("tokenSummary는 형태를 정확히 판정한다", () => {
+  assert.deepEqual(tokenSummary(""), { present: false });
+  assert.deepEqual(tokenSummary(undefined), { present: false });
+
+  const good = tokenSummary(REAL_SHAPE);
+  assert.equal(good.length, 192);
+  assert.equal(good.looks_hex, false);
+  assert.equal(good.looks_atlassian, true);
+  assert.equal(good.maybe_truncated, false);
+
+  const hex = tokenSummary(Buffer.from(REAL_SHAPE + "\n", "utf8").toString("hex"));
+  assert.equal(hex.looks_hex, true);
+  assert.equal(hex.looks_atlassian, false);
+
+  assert.equal(tokenSummary(REAL_SHAPE.slice(0, 128)).maybe_truncated, true);
+});
+
+test("tokenProblems는 원인별로 실행할 명령을 준다", () => {
+  const bad = (t) => tokenProblems(tokenSummary(t)).filter((c) => !c.ok);
+
+  const hex = bad(Buffer.from(REAL_SHAPE + "\n", "utf8").toString("hex"));
+  assert.equal(hex.length, 1);
+  assert.match(hex[0].detail, /hex/);
+  assert.match(hex[0].fix, /add-generic-password -U/);
+
+  const cut = bad(REAL_SHAPE.slice(0, 128));
+  assert.match(cut[0].detail, /128자/);
+  assert.match(cut[0].fix, /-w 뒤에 값을 직접/);
+
+  assert.equal(bad(REAL_SHAPE).length, 0, "정상 토큰은 문제 없음");
+  assert.match(tokenProblems({ present: false })[0].fix, /BITBUCKET_TOKEN_CMD/);
+});
+
+test("extractScopeInfo는 403 본문에서 granted/required를 뽑는다", () => {
+  const body = JSON.stringify({
+    type: "error",
+    error: {
+      message: "Your credentials lack one or more required privilege scopes.",
+      detail: {
+        required: ["read:user:bitbucket"],
+        granted: ["read:repository:bitbucket", "read:pullrequest:bitbucket"],
+      },
+    },
+  });
+  const info = extractScopeInfo(body);
+  assert.deepEqual(info.required, ["read:user:bitbucket"]);
+  assert.equal(info.granted.length, 2);
+
+  // 형태가 다르면 null 로 떨어진다 (예외를 던지지 않는다)
+  assert.deepEqual(extractScopeInfo("not json"), { granted: null, required: null });
+  assert.deepEqual(extractScopeInfo("{}"), { granted: null, required: null });
+});
+
+test("scopeProblems는 부족한 스코프와 못 쓰는 툴을 짝지어 준다", () => {
+  const partial = scopeProblems([
+    "read:repository:bitbucket",
+    "read:pullrequest:bitbucket",
+  ]);
+  const missing = partial.filter((c) => !c.ok);
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].label, "write:pullrequest:bitbucket");
+  assert.match(missing[0].detail, /bb_comment/);
+
+  const all = scopeProblems(Object.keys(
+    // 세 스코프 전부
+    { "read:repository:bitbucket": 1, "read:pullrequest:bitbucket": 1, "write:pullrequest:bitbucket": 1 },
+  ));
+  assert.equal(all.filter((c) => !c.ok).length, 0);
+
+  assert.deepEqual(scopeProblems(null), [], "목록을 못 얻으면 판정하지 않는다");
+});

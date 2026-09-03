@@ -1,0 +1,17 @@
+{
+  "_주의": "이 파일을 .mcp.json 으로 복사해 쓰세요. .mcp.json 은 .gitignore 에 있습니다.",
+  "_토큰": "BITBUCKET_API_TOKEN 을 평문으로 넣지 마세요. 키체인 + TOKEN_CMD 를 쓰세요.",
+  "_경로": "args 와 BITBUCKET_ALLOWED_REPOS_FILE 은 절대 경로여야 합니다.",
+  "mcpServers": {
+    "bitbucket": {
+      "command": "node",
+      "args": ["/absolute/path/to/bb-mcp/server.mjs"],
+      "env": {
+        "BITBUCKET_EMAIL": "you@company.com",
+        "BITBUCKET_TOKEN_CMD": "security find-generic-password -s bb-api-token -w",
+        "BITBUCKET_ALLOWED_REPOS_FILE": "/Users/you/.config/bb-mcp/allowed-repos",
+        "BITBUCKET_ALLOW_COMMENT": "true"
+      }
+    }
+  }
+}

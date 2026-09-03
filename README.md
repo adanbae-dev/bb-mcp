@@ -11,6 +11,8 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `lib.mjs` | 가드·파서·응답 축약 등 순수 로직 (테스트 대상) |
 | `test/lib.test.mjs` | 단위 테스트 |
 | `test/integration.test.mjs` | 가짜 Bitbucket API + 실제 MCP 클라이언트 |
+| `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·등록) |
+| `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
 
 `.config/`는 `.gitignore`에 들어 있다. 허용 저장소 목록에 사내 저장소 이름이 담긴다.
@@ -20,8 +22,19 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 ## 1. 빠른 시작
 
 ```bash
+./setup.sh
+```
+
+키체인 저장(128자 절단·개행→hex 회피), allowlist 파일 생성,
+`claude mcp add` 명령 조립까지 대신한다. 끝나면 세션을 재시작하고
+`bb_doctor` 를 부른다.
+
+<details>
+<summary>손으로 하려면</summary>
+
+```bash
 npm i @modelcontextprotocol/sdk@1 zod@3
-npm test                                              # 51개 통과
+npm test                                              # 107개
 
 # 토큰 (-w 뒤에 값을 직접. 대화형 프롬프트는 128자에서 잘린다)
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
@@ -38,6 +51,11 @@ claude mcp add --scope user \
   --env BITBUCKET_ALLOW_COMMENT=true \
   --transport stdio bitbucket -- $(which node) /absolute/path/bb-mcp/server.mjs
 ```
+
+`npm link` 하면 절대경로 대신 `-- npx bb-mcp` 로 등록할 수 있다.
+팀에 나눠줄 때는 `.mcp.json.example` 을 `.mcp.json` 으로 복사한다.
+
+</details>
 
 Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.30 / zod 3.
 
@@ -108,6 +126,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_pr_comments(repo, id, inline_only?)` | 이미 달린 코멘트 |
 | `bb_file(repo, ref, path, start?, end?)` | 커밋·브랜치의 파일 전문, **줄 번호 포함** |
 | `bb_get(path, fields?)` | 위로 안 되는 경로용 범용 GET |
+| `bb_doctor(probe?)` | **설정 진단** — 토큰·인증·스코프·allowlist·게이트 |
 
 `bb_repos`는 allowlist가 설정돼 있으면 **그 목록만** 조회한다.
 워크스페이스 전체 목록은 노출하지 않는다. allowlist가 없을 때만
@@ -116,6 +135,12 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 `bb_pr_inbox`는 allowlist의 모든 저장소를 병렬로 훑어 한 번에 돌려준다.
 저장소 하나가 실패해도 나머지는 그대로 오고, 실패는 `errors`에 모인다.
 저장소가 여럿일 때 리뷰의 출발점이다.
+
+`bb_doctor`는 401·403이 나거나 툴이 안 먹을 때 **가장 먼저 부른다.**
+겪은 함정(스코프 없는 토큰, 키체인 128자 절단, 개행→hex, 빈 allowlist)을
+전부 감지하고 실행할 명령까지 알려준다. 읽기 전용이고 **토큰 값은 어떤 형태로도
+출력하지 않는다** — 접두사조차 담지 않고 boolean으로만 판정한다.
+allowlist가 깨져 있어도 동작한다(정작 진단이 필요한 상황이므로).
 
 `bb_file`은 diff의 hunk만으로 판단이 안 설 때 파일 전문을 본다.
 줄 번호가 붙어 나오므로 `bb_comment`의 `line`을 여기서 그대로 읽는다.
@@ -256,16 +281,17 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 96개
+npm test    # 107개
 ```
 
-- `test/lib.test.mjs` (52) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
+- `test/lib.test.mjs` (57) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
-  diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한
+  diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
 - `test/integration.test.mjs` (44) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   런타임 반영·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,
-  **퍼센트 인코딩 경로 탈출 차단**, **토큰 유출 방어**, 동시성 상한을 확인
+  **퍼센트 인코딩 경로 탈출 차단**, **토큰 유출 방어**, 동시성 상한,
+  **bb_doctor(정상/hex/빈 allowlist/probe=false/읽기 전용)** 를 확인
 
 ### 라이브 API 검증 상태
 

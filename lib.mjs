@@ -388,3 +388,96 @@ export function capItems(items, maxBytes) {
   }
   return { items, dropped: 0 };
 }
+
+// ── 자기 진단 ─────────────────────────────────────────────────────────
+// 설정 오류가 지금은 평범한 401로만 보여서 원인을 찾기 어렵다.
+// 겪은 함정을 전부 프로그램으로 감지한다.
+//
+// 토큰 값은 어떤 형태로도 내보내지 않는다. 접두사조차 담지 않고
+// boolean으로만 판정한다 — 진단에 필요한 정보는 그것으로 충분하다.
+export function tokenSummary(token) {
+  if (!token) return { present: false };
+  const looksHex =
+    token.length >= 40 && token.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(token);
+  return {
+    present: true,
+    length: token.length,
+    looks_hex: looksHex,
+    looks_atlassian: token.startsWith("ATATT"),
+    // 대화형 프롬프트로 저장하면 여기서 잘린다
+    maybe_truncated: token.length === 128,
+  };
+}
+
+// 스코프가 모자라면 Bitbucket이 403 본문에 granted 목록을 담아준다.
+// 이게 지금 토큰이 가진 스코프를 알 수 있는 유일한 경로다.
+export function extractScopeInfo(bodyText) {
+  try {
+    const d = JSON.parse(bodyText);
+    const detail = d?.error?.detail;
+    return {
+      granted: Array.isArray(detail?.granted) ? detail.granted : null,
+      required: Array.isArray(detail?.required) ? detail.required : null,
+    };
+  } catch {
+    return { granted: null, required: null };
+  }
+}
+
+// 진단 항목 하나. fix 가 있으면 사용자가 바로 실행할 수 있는 조치다.
+export function check(ok, label, detail, fix) {
+  return fix && !ok ? { ok, label, detail, fix } : { ok, label, detail };
+}
+
+// 토큰 형태만 보고 판정할 수 있는 문제들
+export function tokenProblems(summary) {
+  const out = [];
+  if (!summary.present) {
+    out.push(
+      check(false, "토큰", "토큰을 읽지 못했습니다", "BITBUCKET_API_TOKEN 또는 BITBUCKET_TOKEN_CMD 를 설정하세요"),
+    );
+    return out;
+  }
+  if (summary.looks_hex) {
+    out.push(
+      check(
+        false,
+        "토큰 형태",
+        `hex로 인코딩돼 보입니다 (${summary.length}자). 키체인 값에 개행이 섞이면 security -w 가 hex를 출력합니다`,
+        `security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'`,
+      ),
+    );
+  } else if (summary.maybe_truncated) {
+    out.push(
+      check(
+        false,
+        "토큰 형태",
+        "정확히 128자입니다. security 의 대화형 프롬프트가 128자에서 자릅니다",
+        `security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'  # -w 뒤에 값을 직접`,
+      ),
+    );
+  } else if (!summary.looks_atlassian) {
+    out.push(
+      check(false, "토큰 형태", `Atlassian API 토큰 형태가 아닙니다 (${summary.length}자)`, "스코프가 지정된 Atlassian API 토큰인지 확인하세요"),
+    );
+  } else {
+    out.push(check(true, "토큰 형태", `${summary.length}자, Atlassian 토큰 형태, hex 아님`));
+  }
+  return out;
+}
+
+// 스코프 목록으로 어떤 툴이 동작하는지 판정한다
+export const SCOPE_NEEDS = {
+  "read:repository:bitbucket": ["bb_repos", "bb_pr_diff", "bb_file"],
+  "read:pullrequest:bitbucket": ["bb_pr_inbox", "bb_pr_list", "bb_pr_get", "bb_pr_files", "bb_pr_comments"],
+  "write:pullrequest:bitbucket": ["bb_comment"],
+};
+
+export function scopeProblems(granted) {
+  if (!granted) return [];
+  return Object.entries(SCOPE_NEEDS).map(([scope, tools]) =>
+    granted.includes(scope)
+      ? check(true, scope, tools.join(", "))
+      : check(false, scope, `없음 → ${tools.join(", ")} 사용 불가`, "토큰을 이 스코프를 포함해 재발급하세요"),
+  );
+}
