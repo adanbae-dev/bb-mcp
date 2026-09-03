@@ -381,9 +381,13 @@ MCP 서버가 어느 cwd에서 뜰지 보장되지 않는다. (`~/`는 서버가
 MCP 툴은 슬래시 명령이 아니다. `/bb-pr-review` 를 쓰려면 스킬을 설치한다.
 
 ```bash
-claude plugin marketplace add ./
+claude plugin marketplace add adanbae-dev/bb-mcp
 claude plugin install bb-pr-review@bb-mcp --scope user
 ```
+
+로컬 저장소에서 개발 중이면 `add ./` (`.` 은 거부된다).
+한 마켓플레이스 이름에 소스는 하나이므로 갈아탈 때는
+`marketplace remove bb-mcp` 를 먼저 한다.
 
 `setup.sh` 6단계가 대신한다. 자세한 것은 [README.md §1-1](./README.md).
 

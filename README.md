@@ -78,14 +78,32 @@ MCP 서버만 등록하면 툴 12개가 생기지만, **툴은 슬래시 명령�
 ### 플러그인으로 설치 (권장)
 
 ```bash
-claude plugin marketplace add ./            # `.` 은 거부된다. `./` 로 쓴다
+claude plugin marketplace add adanbae-dev/bb-mcp
 claude plugin install bb-pr-review@bb-mcp --scope user
 claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 ```
 
 세션 재시작 후 `/bb-pr-review`와 `/bb-review`가 뜬다.
+설치본은 `~/.claude/plugins/cache/bb-mcp/bb-pr-review/<버전>/` 에 놓인다.
 
-배포할 때는 `./` 대신 git URL이나 `owner/repo` 를 쓴다.
+로컬 저장소에서 개발 중이면 경로를 쓴다. **`.` 은 거부되고 `./` 만 받는다.**
+
+```bash
+claude plugin marketplace add ./
+```
+
+**한 마켓플레이스 이름에 소스는 하나다.** 이미 `bb-mcp` 가 다른 소스로
+등록돼 있으면 `its network source differs from the one declared` 로 거부된다.
+갈아탈 때는 먼저 걷어낸다.
+
+```bash
+claude plugin uninstall bb-pr-review@bb-mcp
+claude plugin marketplace remove bb-mcp
+claude plugin marketplace add adanbae-dev/bb-mcp    # 또는 ./
+claude plugin install bb-pr-review@bb-mcp --scope user
+```
+
+갱신은 `claude plugin update bb-pr-review@bb-mcp` (재시작 필요).
 
 ### 스킬만 복사
 
