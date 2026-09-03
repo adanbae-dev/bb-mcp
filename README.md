@@ -13,9 +13,9 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `test/integration.test.mjs` | 가짜 Bitbucket API + 실제 MCP 클라이언트 |
 | `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·등록) |
 | `.claude-plugin/plugin.json` | 플러그인 매니페스트 |
-| `.mcp.json` | 플러그인의 MCP 서버 선언 (`${CLAUDE_PLUGIN_ROOT}` 사용) |
 | `skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
 | `commands/bb-review.md` | `/bb-review` 진입점 |
+| `plugin-template/mcp.json` | 배포용 MCP 선언 (루트에 두면 안 되는 이유는 그 폴더 README) |
 | `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
 
@@ -68,22 +68,42 @@ Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.3
 그리고 코멘트를 달 거면 `write:pullrequest:bitbucket`.
 발급 절차와 키체인 저장 시 주의사항은 [Settings.md §3–5](./Settings.md).
 
-## 1-1. 플러그인으로 쓰기
+## 1-1. 슬래시 명령으로 쓰기
 
 MCP 서버만 등록하면 툴 12개가 생기지만, **툴은 슬래시 명령이 아니다.**
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
-`/bb-review`처럼 직접 치고 싶으면 플러그인으로 설치한다.
+`/bb-pr-review`처럼 직접 치려면 **스킬**을 설치해야 한다.
 
-플러그인은 **MCP 서버 + 스킬 + 슬래시 명령을 한 묶음으로** 배포한다.
-
-```
-.claude-plugin/plugin.json    메타데이터 (skills/, commands/ 경로 선언)
-.mcp.json                     MCP 서버 선언
-skills/bb-pr-review/SKILL.md  리뷰 스킬
-commands/bb-review.md         /bb-review
+```bash
+./setup.sh          # 6단계에서 스킬까지 설치한다
 ```
 
-검증:
+또는 직접:
+
+```bash
+mkdir -p ~/.claude/skills/bb-pr-review ~/.claude/commands
+cp skills/bb-pr-review/*.md ~/.claude/skills/bb-pr-review/
+cp commands/bb-review.md ~/.claude/commands/
+```
+
+다음 세션에서 `/bb-pr-review`(스킬)와 `/bb-review`(짧은 별칭)가 뜬다.
+스킬의 `trigger:` 프론트매터가 슬래시 명령을 만든다 — `~/.claude/skills/`에
+있어야 로드되고, **저장소의 `skills/` 디렉터리는 탐색되지 않는다.**
+
+### 저장소 루트에 `.mcp.json` 을 두지 않는다 ⚠️
+
+플러그인은 루트 `.mcp.json` 으로 MCP 서버를 선언하고 경로에
+`${CLAUDE_PLUGIN_ROOT}` 를 쓴다. 그런데 **이 저장소는 그 자체로 Claude Code
+프로젝트**라서, 루트 `.mcp.json` 은 프로젝트 스코프 MCP 설정으로 읽힌다.
+프로젝트 스코프는 user 스코프를 덮어쓰고, `${CLAUDE_PLUGIN_ROOT}` 는
+설치된 플러그인으로 로드될 때만 치환되므로 경로가 그대로 남아 서버가 못 뜬다.
+
+실제로 한 번 이렇게 깨졌다. `.gitignore` 에 `.mcp.json` 을 넣어 막아 뒀고,
+배포용 선언은 `plugin-template/mcp.json` 에 있다.
+
+### 플러그인으로 배포할 때
+
+`.claude-plugin/plugin.json` 은 스킬·명령 경로를 선언한다.
 
 ```bash
 claude plugin validate .          # 매니페스트
@@ -91,23 +111,10 @@ claude plugin validate ./skills   # 스킬
 claude plugin validate ./commands # 명령
 ```
 
-`.mcp.json`은 서버 경로를 `${CLAUDE_PLUGIN_ROOT}/server.mjs`로 가리키고,
-자격증명은 `${BITBUCKET_EMAIL}` 처럼 환경변수 치환으로 받는다.
-**토큰 값을 이 파일에 직접 넣지 않는다** — 저장소에 커밋되는 파일이다.
-
-의존성(`@modelcontextprotocol/sdk`, `zod`)은 플러그인 디렉터리에
-`node_modules`가 있어야 한다. 로컬 개발 중이라면 이미 있고,
-배포한다면 설치 시 `npm install`이 돌아야 한다.
-
-### 스킬만 쓰고 싶으면
-
-플러그인 없이 스킬만 쓸 수도 있다.
-
-```bash
-cp -r skills/bb-pr-review ~/.claude/skills/
-```
-
-MCP 서버는 `setup.sh`나 `claude mcp add`로 따로 등록한다.
+MCP 서버까지 묶으려면 `plugin-template/mcp.json` 을 플러그인 루트의
+`.mcp.json` 으로 복사하고, 그 루트에 `server.mjs`·`lib.mjs`·`node_modules` 를
+함께 둔다. 자격증명은 `${BITBUCKET_EMAIL}` 처럼 치환으로 받고
+**토큰 값을 파일에 넣지 않는다.**
 
 ## 2. 환경변수
 

@@ -16,7 +16,7 @@ warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 die()  { printf '  \033[31m✖\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ── 1. 사전 확인 ──────────────────────────────────────────────────────
-say "1/5  사전 확인"
+say "1/6  사전 확인"
 
 command -v node >/dev/null || die "node 를 찾을 수 없습니다"
 NODE_BIN="$(command -v node)"
@@ -34,12 +34,12 @@ else
   warn "키체인이 없습니다. 토큰을 BITBUCKET_API_TOKEN 환경변수로 직접 넣어야 합니다"
 fi
 
-say "2/5  의존성"
+say "2/6  의존성"
 (cd "$DIR" && npm install --silent) && ok "설치 완료"
 (cd "$DIR" && npm test >/dev/null 2>&1) && ok "테스트 통과" || die "테스트 실패 — npm test 로 확인하세요"
 
 # ── 3. 토큰 ──────────────────────────────────────────────────────────
-say "3/5  토큰"
+say "3/6  토큰"
 cat <<'HINT'
   Atlassian 계정 → Security → "Create API token with scopes" 로 발급합니다.
   (스코프 없는 "Create API token" 으로 만들면 Bitbucket 에서 동작하지 않습니다)
@@ -100,7 +100,7 @@ else
 fi
 
 # ── 4. 허용 저장소 ────────────────────────────────────────────────────
-say "4/5  허용 저장소"
+say "4/6  허용 저장소"
 if [ -s "$ALLOWLIST" ] && grep -qvE '^\s*(#|$)' "$ALLOWLIST"; then
   chmod 600 "$ALLOWLIST" 2>/dev/null || true
   ok "$ALLOWLIST 에 $(grep -cvE '^\s*(#|$)' "$ALLOWLIST")개 있음 (권한 600)"
@@ -124,7 +124,7 @@ else
 fi
 
 # ── 5. 등록 ──────────────────────────────────────────────────────────
-say "5/5  등록"
+say "5/6  등록"
 C=""; read -rp "  bb_comment(PR 코멘트 작성)를 허용할까요? [y/N] " C || true
 ALLOW_COMMENT=$([ "${C:-N}" = "y" ] && echo true || echo false)
 
@@ -156,9 +156,34 @@ if command -v claude >/dev/null; then
   fi
 fi
 
+# ── 6. 스킬 ──────────────────────────────────────────────────────────
+say "6/6  리뷰 스킬"
+SKILL_SRC="$DIR/skills/bb-pr-review"
+SKILL_DST="$HOME/.claude/skills/bb-pr-review"
+if [ -d "$SKILL_SRC" ]; then
+  if [ -e "$SKILL_DST" ]; then
+    R=""; read -rp "  $SKILL_DST 가 이미 있습니다. 덮어쓸까요? [y/N] " R || true
+    if [ "${R:-N}" = "y" ]; then
+      cp -R "$SKILL_SRC/." "$SKILL_DST/" && ok "갱신"
+    else
+      ok "기존 스킬 유지"
+    fi
+  else
+    mkdir -p "$SKILL_DST"
+    cp -R "$SKILL_SRC/." "$SKILL_DST/" && ok "$SKILL_DST"
+  fi
+  if [ -f "$DIR/commands/bb-review.md" ]; then
+    mkdir -p "$HOME/.claude/commands"
+    cp "$DIR/commands/bb-review.md" "$HOME/.claude/commands/bb-review.md" && ok "/bb-review 명령"
+  fi
+  echo "  → 다음 세션에서 /bb-pr-review 와 /bb-review 가 뜹니다"
+else
+  warn "skills/bb-pr-review 를 찾을 수 없어 건너뜁니다"
+fi
+
 say "다음"
 cat <<'NEXT'
-  1. Claude Code 세션을 재시작합니다 (설정은 기동 시 읽힙니다)
+  1. Claude Code 세션을 재시작합니다 (설정·스킬은 기동 시 읽힙니다)
   2. 세션에서 bb_doctor 를 부릅니다 — 토큰·스코프·allowlist·게이트를 한 번에 점검합니다
   3. 문제가 있으면 bb_doctor 가 실행할 명령까지 알려줍니다
 

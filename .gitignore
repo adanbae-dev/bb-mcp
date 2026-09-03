@@ -7,5 +7,10 @@ node_modules/
 .env
 *.local.json
 
-# 주의: 루트 .mcp.json 은 플러그인의 MCP 선언이라 추적한다.
-# 토큰 값을 직접 넣지 말고 ${VAR} 치환만 쓴다.
+# 루트 .mcp.json 은 두지 않는다. 이 저장소가 그 자체로 Claude Code
+# 프로젝트라서, 프로젝트 스코프 MCP 설정으로 읽혀 user 스코프 등록을
+# 덮어쓴다. 배포용 선언은 plugin-template/mcp.json 에 있다.
+.mcp.json
+
+# Claude Code 가 프로젝트에 만드는 로컬 설정
+.claude/
