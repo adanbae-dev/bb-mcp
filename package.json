@@ -1,0 +1,30 @@
+{
+  "name": "bb-mcp",
+  "version": "0.6.0",
+  "description": "개인 Atlassian API 토큰으로 Bitbucket Cloud REST API 2.0에 붙는 최소 MCP 서버",
+  "type": "module",
+  "main": "server.mjs",
+  "bin": {
+    "bb-mcp": "server.mjs"
+  },
+  "files": [
+    "server.mjs",
+    "lib.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test ./test/lib.test.mjs ./test/integration.test.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "bitbucket"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  }
+}
