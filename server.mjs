@@ -134,9 +134,15 @@ const ALLOWLIST = (() => {
 const FORMAT_HINT =
   "한 줄에 workspace/repo 하나씩 적습니다. `#` 이후는 주석입니다.";
 
-function resolveAllowedRepos() {
-  if (ALLOWLIST.mode === "env") return ALLOWLIST.repos;
-  if (ALLOWLIST.mode === "open") return []; // 제한 없음. 접근 범위는 토큰 스코프에 맡긴다
+// 파일 모드에서 목록을 매 호출 다시 읽을지. 기본은 기동 시 한 번(false).
+//
+// 경계의 실체는 "설정을 고치기 어렵다"가 아니라 "고쳐도 재시작해야 먹는다"다.
+// 하이재킹된 에이전트가 파일을 고쳐도 그 세션에서는 쓸 수 없어야 한다.
+// true 로 켜면 재시작 없이 반영되지만, 에이전트가 Write/Edit 로 파일을 고쳐
+// 스스로 경계를 넓힐 수 있다 (README §7 ②).
+const ALLOWLIST_RELOAD = process.env.BITBUCKET_ALLOWLIST_RELOAD === "true";
+
+function readAllowlistFile() {
   let content;
   try {
     content = readFileSync(ALLOWLIST.file, "utf8");
@@ -153,6 +159,25 @@ function resolveAllowedRepos() {
     );
   }
   return repos;
+}
+
+// 기동 시 스냅샷. 실패해도 기동은 시킨다 — 그래야 bb_doctor 로 원인을 볼 수 있다.
+let snapshot = null;
+let snapshotError = null;
+if (ALLOWLIST.mode === "file" && !ALLOWLIST_RELOAD) {
+  try {
+    snapshot = readAllowlistFile();
+  } catch (e) {
+    snapshotError = e;
+  }
+}
+
+function resolveAllowedRepos() {
+  if (ALLOWLIST.mode === "env") return ALLOWLIST.repos;
+  if (ALLOWLIST.mode === "open") return []; // 제한 없음. 접근 범위는 토큰 스코프에 맡긴다
+  if (ALLOWLIST_RELOAD) return readAllowlistFile();
+  if (snapshotError) throw snapshotError;
+  return snapshot;
 }
 
 // 토큰을 mcp.json 평문에 두지 않으려면 BITBUCKET_TOKEN_CMD 사용
@@ -289,7 +314,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.7.2" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.8.0" });
 
 // 1. 저장소 목록
 server.registerTool(
@@ -727,7 +752,9 @@ server.registerTool(
       allowed = [];
       add(check(true, "allowlist", "없음 (open) — 접근 범위가 토큰 스코프 전체입니다"));
     } else {
-      add(check(true, "allowlist 소스", `${ALLOWLIST.mode}${ALLOWLIST.file ? ` (${ALLOWLIST.file})` : ""}`));
+      const when =
+        ALLOWLIST.mode !== "file" ? "기동 시 고정" : ALLOWLIST_RELOAD ? "호출마다 재읽기" : "기동 시 스냅샷";
+      add(check(true, "allowlist 소스", `${ALLOWLIST.mode} (${when})${ALLOWLIST.file ? ` ${ALLOWLIST.file}` : ""}`));
       try {
         allowed = resolveAllowedRepos();
         add(check(allowed.length > 0, "허용 저장소", `${allowed.length}개: ${allowed.join(", ")}`));

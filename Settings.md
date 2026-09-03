@@ -183,7 +183,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 107개 통과 확인
+npm test   # 121개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -257,10 +257,12 @@ LIST
 
 자세한 동작은 [README.md §4](./README.md)에.
 
-**주의:** 파일 모드는 재시작 없는 편의를 얻는 대신, 에이전트가 `Write`/`Edit`
-툴로 이 파일을 직접 고칠 수 있다는 약점이 있다. 더 단단한 경계가 필요하면
-`BITBUCKET_ALLOWED_REPOS`(env) 모드를 쓴다 — 넓히려면 세션 재시작이 필요하다.
-[README.md §7 보안](./README.md)에 정리돼 있다.
+**목록은 기동 시 한 번 읽는다.** 저장소를 추가하려면 파일에 한 줄 넣고
+세션을 재시작한다. 편집은 쉽고 반영에는 재시작이 필요한 이 조합이
+경계의 실체다 — 에이전트가 파일을 고쳐도 그 세션에서는 쓸 수 없다.
+
+`BITBUCKET_ALLOWLIST_RELOAD=true` 로 켜면 재시작 없이 반영되지만
+그 장벽이 사라진다. [README.md §7 ②](./README.md) 참고.
 
 ---
 
@@ -423,7 +425,7 @@ stderr(= Claude Code의 MCP 로그)에 요청·상태·소요시간·재시도�
 
 | 바꾼 것 | 재시작 |
 |---|---|
-| allowlist 파일 내용 | **불필요** |
+| allowlist 파일 내용 | **필요** (`ALLOWLIST_RELOAD=true` 면 불필요) |
 | 키체인 토큰 | 불필요 (최대 60초) |
 | `server.mjs` / `lib.mjs` 코드 | **필요** |
 | `~/.claude.json`의 env | **필요** |

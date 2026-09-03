@@ -183,6 +183,7 @@ async function withServer(envExtra, fn) {
 }
 
 // 파일 모드로 서버를 띄운다. writeList 로 실행 중에 목록을 갈아끼울 수 있다.
+// reload:true 를 주면 호출마다 파일을 다시 읽는다(기본은 기동 시 스냅샷).
 async function withFileAllowlist(initial, fn, envExtra = {}) {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-al-"));
   const file = path.join(tmp, "allowed-repos");
@@ -344,7 +345,7 @@ test("파일 모드: 파일의 저장소만 통과하고 소스를 file로 보�
   });
 });
 
-test("파일 모드: 재시작 없이 저장소 추가·삭제가 반영된다", async () => {
+test("RELOAD=true: 재시작 없이 저장소 추가·삭제가 반영된다", async () => {
   await withFileAllowlist("acme/repo-a\n", async ({ callTool, writeList }) => {
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, true, "처음엔 repo-b 차단");
 
@@ -355,7 +356,7 @@ test("파일 모드: 재시작 없이 저장소 추가·삭제가 반영된다",
     writeList("acme/repo-b\n"); // repo-a 제거
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, true, "제거 즉시 차단");
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, false);
-  });
+  }, { BITBUCKET_ALLOWLIST_RELOAD: "true" });
 });
 
 test("파일 모드: 주석·빈 줄·중복을 처리한다", async () => {
@@ -372,7 +373,7 @@ acme/repo-a
   });
 });
 
-test("파일 모드: 파일이 비면 전체 개방이 아니라 전체 차단이다", async () => {
+test("RELOAD=true: 실행 중 파일이 비면 전체 개방이 아니라 전체 차단이다", async () => {
   await withFileAllowlist("acme/repo-a\n", async ({ callTool, writeList, file }) => {
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, false);
     writeList("# 다 지웠음\n");
@@ -383,17 +384,17 @@ test("파일 모드: 파일이 비면 전체 개방이 아니라 전체 차단�
     // 다른 저장소도 열리지 않는다
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, true);
     assert.equal((await callTool("bb_get", { path: "/repositories/acme" })).isError, true);
-  });
+  }, { BITBUCKET_ALLOWLIST_RELOAD: "true" });
 });
 
-test("파일 모드: 파일이 사라지면 전체 차단이다", async () => {
+test("RELOAD=true: 실행 중 파일이 사라지면 전체 차단이다", async () => {
   await withFileAllowlist("acme/repo-a\n", async ({ callTool, file }) => {
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, false);
     rmSync(file);
     const r = await callTool("bb_pr_list", { repo: "acme/repo-a" });
     assert.equal(r.isError, true);
     assert.match(r.text, /읽을 수 없어 모든 저장소를 차단/);
-  });
+  }, { BITBUCKET_ALLOWLIST_RELOAD: "true" });
 });
 
 test("파일 모드: 형식이 틀린 줄은 줄 번호와 함께 오류를 낸다", async () => {
@@ -405,8 +406,7 @@ test("파일 모드: 형식이 틀린 줄은 줄 번호와 함께 오류를 낸�
   });
 });
 
-test("_FILE을 지정하면 파일이 나중에 생겨도 재시작 없이 반영된다", async () => {
-  // 권장 설정 흐름: .mcp.json 에 _FILE 을 박아두고 파일은 나중에 만든다
+test("RELOAD=true: 파일이 나중에 생겨도 재시작 없이 반영된다", async () => {
   await withFileAllowlist(null, async ({ callTool, writeList, file }) => {
     const before = await callTool("bb_pr_list", { repo: "acme/repo-a" });
     assert.equal(before.isError, true, "파일이 없으면 차단");
@@ -416,7 +416,7 @@ test("_FILE을 지정하면 파일이 나중에 생겨도 재시작 없이 반�
     writeList("acme/repo-a\n"); // 서버는 계속 떠 있다
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, false, "생성 즉시 허용");
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, true);
-  });
+  }, { BITBUCKET_ALLOWLIST_RELOAD: "true" });
 });
 
 test("env가 설정돼 있으면 파일보다 우선한다", async () => {
@@ -855,4 +855,78 @@ test("메타데이터만 주는 툴에는 표시를 붙이지 않는다", async 
     const doc = JSON.parse((await callTool("bb_doctor", { probe: false })).text);
     assert.equal(doc._untrusted, undefined);
   });
+});
+
+// ── 파일 모드 기본: 기동 시 스냅샷 ────────────────────────────────────
+// 경계의 실체는 "고치기 어렵다"가 아니라 "고쳐도 재시작해야 먹는다"다.
+// 파일 편집은 한 줄로 쉽지만, 그 세션에서는 쓸 수 없어야 한다.
+
+test("기본은 기동 시 스냅샷이다 (실행 중 파일 편집이 먹지 않는다)", async () => {
+  await withFileAllowlist("acme/repo-a\n", async ({ callTool, writeList }) => {
+    assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, false);
+    assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, true);
+
+    // 하이재킹된 에이전트가 파일을 넓히는 상황
+    writeList("acme/repo-a\nacme/repo-b\nSECRET-WS/SECRET-REPO\n");
+
+    assert.equal(
+      (await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, true,
+      "재시작 전에는 넓어지면 안 된다",
+    );
+    assert.equal(
+      (await callTool("bb_pr_list", { repo: "SECRET-WS/SECRET-REPO" })).isError, true,
+      "심어둔 저장소도 막혀야 한다",
+    );
+    // 원래 허용된 것은 계속 동작한다
+    assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, false);
+  });
+});
+
+test("스냅샷 모드에서 파일을 지워도 기존 목록으로 계속 동작한다", async () => {
+  await withFileAllowlist("acme/repo-a\n", async ({ callTool, file }) => {
+    rmSync(file);
+    assert.equal(
+      (await callTool("bb_pr_list", { repo: "acme/repo-a" })).isError, false,
+      "이미 읽어둔 목록을 쓴다",
+    );
+    assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, true);
+  });
+});
+
+test("기동 시 파일이 비어 있으면 전체 차단이다 (fail-closed)", async () => {
+  await withFileAllowlist("# 주석만\n", async ({ callTool }) => {
+    const r = await callTool("bb_pr_list", { repo: "acme/repo-a" });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /비어 있어 모든 저장소를 차단/);
+  });
+});
+
+test("기동 시 파일이 없으면 전체 차단이지만 서버는 뜬다", async () => {
+  // 기동 실패로 죽으면 bb_doctor 로 원인을 볼 수 없다
+  await withFileAllowlist(null, async ({ callTool }) => {
+    const doc = JSON.parse((await callTool("bb_doctor", { probe: false })).text);
+    assert.equal(doc.ok, false);
+    const p = doc.problems.find((x) => x.label === "허용 저장소");
+    assert.match(p.detail, /읽을 수 없어/);
+
+    const r = await callTool("bb_pr_list", { repo: "acme/repo-a" });
+    assert.equal(r.isError, true);
+  });
+});
+
+test("bb_doctor는 스냅샷인지 재읽기인지 알려준다", async () => {
+  await withFileAllowlist("acme/repo-a\n", async ({ callTool }) => {
+    const out = JSON.parse((await callTool("bb_doctor", { probe: false })).text);
+    const src = out.checks.find((c) => c.label === "allowlist 소스");
+    assert.match(src.detail, /기동 시 스냅샷/);
+  });
+  await withFileAllowlist(
+    "acme/repo-a\n",
+    async ({ callTool }) => {
+      const out = JSON.parse((await callTool("bb_doctor", { probe: false })).text);
+      const src = out.checks.find((c) => c.label === "allowlist 소스");
+      assert.match(src.detail, /호출마다 재읽기/);
+    },
+    { BITBUCKET_ALLOWLIST_RELOAD: "true" },
+  );
 });
