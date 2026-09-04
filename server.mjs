@@ -347,7 +347,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.11.0" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.11.1" });
 
 // 1. 저장소 목록
 server.registerTool(
@@ -809,7 +809,10 @@ server.registerTool(
     if (probe && !summary.present) {
       add(check(false, "네트워크 검사", "토큰을 못 읽어 건너뜀"));
     } else if (probe && allowed === null) {
-      add(check(false, "네트워크 검사", "allowlist가 깨져 건너뜀 — 위 문제를 먼저 고치세요"));
+      add(check(false, "네트워크 검사",
+        ALLOWLIST.mode === "denied"
+          ? "허용 저장소가 없어 건너뜀 — 먼저 설정하세요"
+          : "allowlist를 읽을 수 없어 건너뜀 — 위 문제를 먼저 고치세요"));
     } else if (probe) {
       const api = makeApi(allowed);
       // /user 는 가드가 허용하는 경로다. 403이면 본문에 granted 목록이 온다.
@@ -871,41 +874,70 @@ server.registerTool(
       "'허용되지 않은 저장소' 오류가 났을 때 먼저 부른다.",
     inputSchema: {},
   },
-  guard(async (_args, api) => {
-    const out = {
-      mode: ALLOWLIST.mode,
-      file: ALLOWLIST.file ?? null,
-      reload: ALLOWLIST.mode === "file" ? ALLOWLIST_RELOAD : null,
-      active: api.allowed,
-      active_count: api.allowed.length,
-    };
+  // guard() 를 쓰지 않는다. guard() 는 진입 시 allowlist를 해석하므로
+  // denied·파싱 실패에서는 이 툴 자체가 못 뜬다 — 정작 상태를 설명해야 할 때다.
+  // bb_doctor 와 같은 처방이다. 읽기 전용이고 네트워크를 쓰지 않아 guard() 의 이점도 없다.
+  async () => {
+    try {
+      const out = {
+        mode: ALLOWLIST.mode,
+        file: ALLOWLIST.file ?? null,
+        reload: ALLOWLIST.mode === "file" ? ALLOWLIST_RELOAD : null,
+      };
 
-    if (ALLOWLIST.mode === "open") {
-      out.warning =
-        "BITBUCKET_ALLOW_ALL_REPOS=true — 제한 없이 동작합니다. 토큰 스코프 전체가 열립니다.";
-      return okJson(out);
-    }
-
-    // 파일 모드에서 스냅샷과 파일이 갈렸는지 본다
-    if (ALLOWLIST.mode === "file" && !ALLOWLIST_RELOAD) {
-      let fileEntries = null;
-      try {
-        fileEntries = readAllowlistFile();
-      } catch (e) {
-        out.file_error = e.message.split("\n")[0];
+      if (ALLOWLIST.mode === "denied") {
+        out.active = [];
+        out.active_count = 0;
+        out.warning = "허용 저장소가 설정되지 않아 모든 저장소가 차단됩니다.";
+        out.fix =
+          `${DEFAULT_FILE} 에 workspace/repo 를 한 줄씩 적고 세션을 재시작하세요. ` +
+          "제한 없이 쓰려면 BITBUCKET_ALLOW_ALL_REPOS=true 를 명시합니다.";
+        return okJson(out);
       }
-      if (fileEntries) {
-        const d = diffAllowlist(api.allowed, fileEntries);
-        out.in_sync = d.in_sync;
-        if (!d.in_sync) {
-          out.pending_add = d.pending.length ? d.pending : undefined;
-          out.pending_remove = d.removed.length ? d.removed : undefined;
-          out.note = "파일이 기동 시점과 다릅니다. 세션을 재시작하면 반영됩니다.";
+
+      // 여기서 해석한다. 실패하면 그것을 상태로 보고한다.
+      let active;
+      try {
+        active = resolveAllowedRepos();
+      } catch (e) {
+        out.active = [];
+        out.active_count = 0;
+        out.error = e.message.split("\n")[0];
+        out.fix = "위 오류를 고친 뒤 세션을 재시작하세요.";
+        return okJson(out);
+      }
+      out.active = active;
+      out.active_count = active.length;
+
+      if (ALLOWLIST.mode === "open") {
+        out.warning =
+          "BITBUCKET_ALLOW_ALL_REPOS=true — 제한 없이 동작합니다. 토큰 스코프 전체가 열립니다.";
+        return okJson(out);
+      }
+
+      // 파일 모드에서 스냅샷과 파일이 갈렸는지 본다
+      if (ALLOWLIST.mode === "file" && !ALLOWLIST_RELOAD) {
+        let fileEntries = null;
+        try {
+          fileEntries = readAllowlistFile();
+        } catch (e) {
+          out.file_error = e.message.split("\n")[0];
+        }
+        if (fileEntries) {
+          const d = diffAllowlist(active, fileEntries);
+          out.in_sync = d.in_sync;
+          if (!d.in_sync) {
+            out.pending_add = d.pending.length ? d.pending : undefined;
+            out.pending_remove = d.removed.length ? d.removed : undefined;
+            out.note = "파일이 기동 시점과 다릅니다. 세션을 재시작하면 반영됩니다.";
+          }
         }
       }
+      return okJson(out);
+    } catch (e) {
+      return fail(e);
     }
-    return okJson(out);
-  }),
+  },
 );
 
 // 12. allowlist 추가

@@ -1018,14 +1018,25 @@ test("bb_allowlist_list 는 적용 중인 목록과 출처를 보여준다", asy
 });
 
 test("bb_allowlist_list 는 파일이 기동 시점과 갈린 것을 알려준다", async () => {
-  await withFileAllowlist("acme/repo-a\n", async ({ callTool, writeList }) => {
-    writeList("acme/repo-a\nacme/repo-new\n");   // 실행 중 추가
-    const out = JSON.parse((await callTool("bb_allowlist_list", {})).text);
+  await withFileAllowlist("acme/repo-a\nacme/repo-b\n", async ({ callTool, writeList }) => {
+    // 추가 방향
+    writeList("acme/repo-a\nacme/repo-b\nacme/repo-new\n");
+    let out = JSON.parse((await callTool("bb_allowlist_list", {})).text);
     assert.equal(out.in_sync, false);
     assert.deepEqual(out.pending_add, ["acme/repo-new"]);
+    assert.equal(out.pending_remove, undefined);
     assert.match(out.note, /재시작/);
     // 실제로는 아직 막혀 있다
     assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-new" })).isError, true);
+
+    // 제거 방향 — 재시작하면 닫힐 저장소
+    writeList("acme/repo-a\n");
+    out = JSON.parse((await callTool("bb_allowlist_list", {})).text);
+    assert.equal(out.in_sync, false);
+    assert.deepEqual(out.pending_remove, ["acme/repo-b"]);
+    assert.equal(out.pending_add, undefined);
+    // 스냅샷에 있으니 아직 열려 있다
+    assert.equal((await callTool("bb_pr_list", { repo: "acme/repo-b" })).isError, false);
   });
 });
 
@@ -1056,6 +1067,55 @@ test("bb_doctor 는 설정 없음을 문제로 보고한다", async () => {
       assert.match(p.fix, /한 줄씩/);
     },
   );
+});
+
+test("bb_allowlist_list 는 denied 모드에서도 상태를 설명한다", async () => {
+  // 회귀: guard() 가 진입 시 allowlist를 해석해서, 설정이 없으면 이 툴 자체가
+  // 오류로 끝났다. 정작 상태를 설명해야 할 상황이다.
+  await withServer(
+    { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: "" },
+    async ({ callTool }) => {
+      const r = await callTool("bb_allowlist_list", {});
+      assert.equal(r.isError, false, "denied 에서 오류로 끝나면 안 된다");
+      const out = JSON.parse(r.text);
+      assert.equal(out.mode, "denied");
+      assert.deepEqual(out.active, []);
+      assert.equal(out.active_count, 0);
+      assert.match(out.warning, /설정되지 않아/);
+      assert.match(out.fix, /한 줄씩/);
+      assert.match(out.fix, /BITBUCKET_ALLOW_ALL_REPOS=true/);
+    },
+  );
+});
+
+test("bb_allowlist_list 는 파일 파싱 실패도 상태로 보고한다", async () => {
+  // 오류로 끝내지 않고 mode·error·fix 를 돌려준다
+  await withFileAllowlist("not-a-repo\n", async ({ callTool }) => {
+    const r = await callTool("bb_allowlist_list", {});
+    assert.equal(r.isError, false);
+    const out = JSON.parse(r.text);
+    assert.equal(out.mode, "file");
+    assert.deepEqual(out.active, []);
+    assert.match(out.error, /형식이 아닙니다/);
+    assert.match(out.fix, /재시작/);
+  });
+});
+
+test("bb_doctor 는 미설정과 파싱 실패를 다른 문구로 안내한다", async () => {
+  await withServer(
+    { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: "" },
+    async ({ callTool }) => {
+      const out = JSON.parse((await callTool("bb_doctor", { probe: true })).text);
+      const net = out.problems.find((x) => x.label === "네트워크 검사");
+      assert.match(net.detail, /허용 저장소가 없어/, "미설정을 '깨졌다'고 하면 안 된다");
+      assert.ok(!net.detail.includes("깨져"));
+    },
+  );
+  await withFileAllowlist("not-a-repo\n", async ({ callTool }) => {
+    const out = JSON.parse((await callTool("bb_doctor", { probe: true })).text);
+    const net = out.problems.find((x) => x.label === "네트워크 검사");
+    assert.match(net.detail, /읽을 수 없어/);
+  });
 });
 
 test("bb_allowlist_add 는 기본 차단이다", async () => {
