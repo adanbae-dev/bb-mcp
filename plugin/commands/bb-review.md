@@ -21,3 +21,6 @@ argument-hint: [workspace/repo] [PR번호] [경로]
 
 저장소·번호를 안 받았으면 `bb_detect_repo()` 로 현재 폴더를 먼저 확인한다.
 감지되면 그 저장소의 열린 PR 중에서 고르게 한다.
+
+저장소를 정하지 못하면 `AskUserQuestion` 선택창으로 고르게 한다 —
+평문으로 되묻지 않는다. 열린 PR이 있는 저장소를 앞에 둔다.

@@ -1,6 +1,6 @@
 {
   "name": "bb-mcp",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "개인 Atlassian API 토큰으로 Bitbucket Cloud REST API 2.0에 붙는 최소 MCP 서버",
   "type": "module",
   "main": "server.mjs",
