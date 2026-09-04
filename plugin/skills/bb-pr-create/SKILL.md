@@ -27,26 +27,50 @@ Bitbucket UI 에 그대로 붙여 쓸 수 있다.
 /bb-pr-create <ws>/<repo> <branch> <dest>      # 대상 브랜치 지정
 ```
 
+## 저장소를 묻지 말고 먼저 감지한다
+
+`repo` 인자가 없으면 **`bb_detect_repo()` 를 먼저 부른다.** 사용자에게 되묻는 것은
+감지에 실패했을 때뿐이다.
+
+```
+bb_detect_repo()
+→ { repo: "acme/web-app", branch: "feature/x", upstream: "origin/feature/x",
+    unpushed: 0, allowed: true, note: "..." }
+```
+
+| 결과 | 할 일 |
+|---|---|
+| `repo` 있고 `allowed: true` | 그대로 쓴다. 어느 저장소를 쓰는지 한 줄로 알린다 |
+| `repo` 있고 `allowed: false` | 멈춘다. allowlist 추가 후 세션 재시작이 필요하다고 알린다 |
+| `repo: null`, `other_remote_host` 있음 | Bitbucket 이 아니다. GitHub 이면 `gh` 를 쓰라고 안내한다 |
+| `is_git: false` | 저장소를 인자로 받는다 |
+
+**remote 이름이 `origin` 이라고 가정하지 않는다** — 툴이 전부 훑어서 bitbucket 인 것을
+고르고, 여러 개면 `origin` 을 우선한다. 실측한 저장소에 remote 가 4개 있었고
+GitHub 3개 + Bitbucket 1개였다.
+
+감지된 저장소를 **말없이 쓰지 않는다.** "acme/web-app 에서 작업합니다" 처럼
+한 줄로 밝히고 진행한다. 사용자가 다른 저장소를 의도했을 수 있다.
+
 ## 실행 순서
 
 ### 1. 저장소·브랜치 확정
 
-로컬 클론에서 부른 경우 git 으로 추론한다.
-
-```bash
-git rev-parse --abbrev-ref HEAD          # 현재 브랜치
-git remote get-url origin                # bitbucket.org/<ws>/<repo>
-git rev-parse --abbrev-ref @{upstream}   # 대상 브랜치 후보
+```
+bb_detect_repo()
 ```
 
-- 원격이 bitbucket.org 가 아니면 **이 스킬을 쓰지 않는다.** GitHub 이면 `gh pr create` 다
-- 현재 브랜치가 `main`/`master`/`dev` 같은 기본 브랜치면 멈추고 물어본다
-- **푸시되지 않은 커밋이 있으면 먼저 알린다.** PR은 원격 브랜치를 기준으로 만들어지므로
-  로컬에만 있는 커밋은 포함되지 않는다
-  ```bash
-  git log --oneline @{upstream}..HEAD 2>/dev/null
-  ```
-- 클론이 없으면 인자로 받는다. 추측하지 않는다
+`repo`·`branch`·`upstream`·`unpushed` 를 한 번에 준다. `git remote get-url origin` 을
+직접 부르지 않는다 — remote 이름이 `origin` 이 아닐 수 있고, 툴이 이미 전부 훑는다.
+
+- `repo: null` 이고 `other_remote_host` 가 GitHub 이면 **이 스킬을 쓰지 않는다.**
+  `gh pr create` 를 안내한다
+- `allowed: false` 면 멈춘다. allowlist 추가 후 세션 재시작이 필요하다
+- `branch` 가 `main`/`master`/`dev` 같은 기본 브랜치면 멈추고 물어본다
+- **`unpushed` 가 0보다 크면 먼저 알린다.** PR은 원격 브랜치를 기준으로 만들어지므로
+  로컬에만 있는 커밋은 포함되지 않는다. 푸시할지 물어본다
+- `upstream: null` 이면 아직 원격에 브랜치가 없다. 푸시가 선행이다
+- `is_git: false` 면 인자로 받는다. 추측하지 않는다
 
 대상 브랜치를 모르면 `bb_repos` 의 `main_branch` 를 쓰되, **저장소마다 다르다** —
 실측한 13개 중 `main`·`master`·`dev` 가 섞여 있었다. 확인 없이 `main` 으로 가정하지 않는다.

@@ -221,13 +221,14 @@ function makeApi() {
   return { srv, seen };
 }
 
-async function withServer(envExtra, fn) {
+async function withServer(envExtra, fn, opts = {}) {
   const { srv, seen } = makeApi();
   await new Promise((r) => srv.listen(0, "127.0.0.1", r));
   const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-it-"));
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [SERVER],
+    ...(opts.cwd ? { cwd: opts.cwd } : {}),
     env: {
       PATH: process.env.PATH,
       HOME: tmp, // 사용자의 실제 ~/.config/bb-mcp 가 테스트에 끼어들지 않게 한다
@@ -256,7 +257,7 @@ async function withServer(envExtra, fn) {
 
 // 파일 모드로 서버를 띄운다. writeList 로 실행 중에 목록을 갈아끼울 수 있다.
 // reload:true 를 주면 호출마다 파일을 다시 읽는다(기본은 기동 시 스냅샷).
-async function withFileAllowlist(initial, fn, envExtra = {}) {
+async function withFileAllowlist(initial, fn, envExtra = {}, opts = {}) {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-al-"));
   const file = path.join(tmp, "allowed-repos");
   const writeList = (text) => writeFileSync(file, text, "utf8");
@@ -265,20 +266,21 @@ async function withFileAllowlist(initial, fn, envExtra = {}) {
     await withServer(
       { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: file, ...envExtra },
       (ctx) => fn({ ...ctx, writeList, file }),
+      opts,
     );
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-test("툴 19개가 등록된다", async () => {
+test("툴 20개가 등록된다", async () => {
   await withServer({}, async ({ client }) => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
       "bb_allowlist_add", "bb_allowlist_list", "bb_branch_commits", "bb_comment",
-      "bb_doctor", "bb_file", "bb_file_history", "bb_get", "bb_pr_activity",
-      "bb_pr_comments", "bb_pr_commits", "bb_pr_create", "bb_pr_diff", "bb_pr_files",
-      "bb_pr_get", "bb_pr_inbox", "bb_pr_list", "bb_repos", "bb_write",
+      "bb_detect_repo", "bb_doctor", "bb_file", "bb_file_history", "bb_get",
+      "bb_pr_activity", "bb_pr_comments", "bb_pr_commits", "bb_pr_create", "bb_pr_diff",
+      "bb_pr_files", "bb_pr_get", "bb_pr_inbox", "bb_pr_list", "bb_repos", "bb_write",
     ]);
   });
 });
@@ -1436,5 +1438,73 @@ test("bb_branch_commits 는 exclude 를 전달한다", async () => {
     assert.equal(out.commits[0].body, undefined, "기본은 제목만");
     assert.ok(out._untrusted);
     assert.ok(seen.requests.includes("EXCLUDE=dev"), "exclude 가 실제로 전달돼야 한다");
+  });
+});
+
+// ── 로컬 저장소 감지 ──────────────────────────────────────────────────
+
+test("bb_detect_repo 는 bitbucket 클론을 감지한다", async () => {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-det-"));
+  const { execFileSync } = await import("node:child_process");
+  const g = (...a) => execFileSync("git", a, { cwd: tmp, stdio: "ignore" });
+  try {
+    g("init", "-q", "-b", "feature/x");
+    g("remote", "add", "gh", "git@github.com:other/thing.git");
+    g("remote", "add", "origin", "git@bitbucket.org:acme/repo-a.git");
+    g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i");
+
+    await withFileAllowlist("acme/repo-a\n", async ({ callTool }) => {
+      const out = JSON.parse((await callTool("bb_detect_repo", {})).text);
+      assert.equal(out.is_git, true);
+      assert.equal(out.repo, "acme/repo-a", "GitHub remote 를 골라선 안 된다");
+      assert.equal(out.remote, "origin");
+      assert.equal(out.branch, "feature/x");
+      assert.equal(out.allowed, true);
+      assert.match(out.note, /자동으로 쓸 수 있습니다/);
+    }, {}, { cwd: tmp });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("bb_detect_repo 는 allowlist 밖이면 allowed:false 로 알린다", async () => {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-det2-"));
+  const { execFileSync } = await import("node:child_process");
+  const g = (...a) => execFileSync("git", a, { cwd: tmp, stdio: "ignore" });
+  try {
+    g("init", "-q");
+    g("remote", "add", "origin", "git@bitbucket.org:acme/not-allowed.git");
+    g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i");
+    await withFileAllowlist("acme/repo-a\n", async ({ callTool }) => {
+      const out = JSON.parse((await callTool("bb_detect_repo", {})).text);
+      assert.equal(out.repo, "acme/not-allowed");
+      assert.equal(out.allowed, false);
+      assert.match(out.note, /허용 저장소가 아닙니다/);
+    }, {}, { cwd: tmp });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("bb_detect_repo 는 git 아닌 폴더에서 이유를 알린다", async () => {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-det3-"));
+  try {
+    await withServer({}, async ({ callTool }) => {
+      const out = JSON.parse((await callTool("bb_detect_repo", {})).text);
+      assert.equal(out.is_git, false);
+      assert.equal(out.repo, undefined);
+      assert.match(out.note, /git 저장소가 아닙니다/);
+    }, { cwd: tmp });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("bb_detect_repo 는 게이트와 무관하게 읽기 전용으로 동작한다", async () => {
+  await withServer({}, async ({ callTool, seen }) => {
+    const r = await callTool("bb_detect_repo", {});
+    assert.equal(r.isError, false);
+    assert.equal(seen.posted.length, 0);
+    assert.equal(seen.requests.length, 0, "네트워크를 쓰지 않는다");
   });
 });

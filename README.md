@@ -72,7 +72,7 @@ Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.3
 
 ## 1-1. 슬래시 명령으로 쓰기
 
-MCP 서버만 등록하면 툴 19개가 생기지만, **툴은 슬래시 명령이 아니다.**
+MCP 서버만 등록하면 툴 20개가 생기지만, **툴은 슬래시 명령이 아니다.**
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
 `/bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
 
@@ -130,7 +130,7 @@ claude plugin update bb-pr-review@bb-mcp
 
 | | 무엇 | 어디에 |
 |---|---|---|
-| MCP 서버 | 툴 19개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
+| MCP 서버 | 툴 20개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
 | 스킬·명령 | `/bb-pr-review`, `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` | 플러그인 캐시 **또는** `~/.claude/skills/` |
 
 가장 짧은 길은 `setup.sh` 하나다. 서버 등록과 스킬 설치를 6단계로 다 한다.
@@ -277,6 +277,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 
 | 툴 | 하는 일 |
 |---|---|
+| `bb_detect_repo()` | **현재 폴더의 저장소 자동 감지** (git remote 기반) |
 | `bb_repos(workspace?)` | 리뷰 대상 저장소 목록 |
 | `bb_pr_inbox(state?, per_repo?)` | **allowlist 전 저장소**의 PR을 최근 갱신순으로 |
 | `bb_pr_list(repo, state?, limit?)` | 한 저장소의 PR 목록. 기본 `OPEN`, 20개, 최근 갱신순 |
@@ -332,6 +333,36 @@ PR 리뷰 중이라면 `ref`에 `bb_pr_get`의 `source_commit`을 넣는다.
 - `side`: `new`(기본, 변경 후 파일 줄) / `old`(변경 전 파일 줄)
   — `new` 의 줄 번호는 `bb_pr_diff` 와 `bb_file` 의 번호와 같다 (실측 확인)
 - `parent_id` → 그 코멘트의 **답글**. `path`/`line`과 같이 쓸 수 없다
+
+### 저장소를 안 물어본다
+
+`bb_detect_repo()` 가 **서버의 cwd** 에서 git 을 읽어 `workspace/repo` 를 찾는다.
+MCP 서버는 Claude Code 가 프로젝트마다 따로 띄우므로 그 cwd 가 곧 작업 중인
+프로젝트다(실측 확인 — 서버 3개가 각자 다른 프로젝트에 붙어 있었다).
+
+```json
+{ "repo": "acme/web-app", "remote": "origin", "branch": "feature/x",
+  "upstream": "origin/feature/x", "unpushed": 0, "allowed": true,
+  "note": "acme/web-app 를 자동으로 쓸 수 있습니다." }
+```
+
+**remote 이름이 `origin` 이라고 가정하지 않는다.** 전부 훑어 bitbucket 인 것을 고르고,
+여러 개면 `origin` 을 우선한다. 실측한 저장소에 remote 가 4개 있었고 GitHub 3 + Bitbucket 1,
+그중 Bitbucket 쪽이 `origin` 이었다 — `git remote get-url origin` 만 봤다면 맞췄겠지만
+`github-origin` 하나만 보고 GitHub 저장소라고 오판할 수도 있었다.
+
+실패 이유를 구분해 알려준다.
+
+| 결과 | 뜻 |
+|---|---|
+| `is_git: false` | git 저장소가 아니다 |
+| `repo: null` + `other_remote_host` | Bitbucket 이 아니다. GitHub 이면 `gh` 를 쓴다 |
+| `allowed: false` | allowlist 밖이다. 추가 후 세션 재시작 |
+
+`unpushed` 는 PR을 만들기 전에 중요하다 — 로컬에만 있는 커밋은 PR에 포함되지 않는다.
+
+스킬들은 `repo` 인자가 없으면 이걸 먼저 부르고, **어느 저장소를 쓰는지 한 줄로 밝힌 뒤**
+진행한다. 말없이 쓰지 않는다.
 
 ### 리뷰 한 바퀴
 
@@ -616,15 +647,15 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 168개
+npm test    # 176개
 ```
 
-- `test/lib.test.mjs` (78) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
+- `test/lib.test.mjs` (82) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
   diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
-- `test/integration.test.mjs` (86) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
+- `test/integration.test.mjs` (90) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   스냅샷/재읽기·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,
   **퍼센트 인코딩 경로 탈출 차단**, **토큰 유출 방어**, 동시성 상한,

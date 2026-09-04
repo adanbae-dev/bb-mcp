@@ -20,3 +20,7 @@ argument-hint: [workspace/repo] [branch] [destination]
 막히면 초안까지 만들어 보여주고 켜는 방법을 알린다.
 
 **승인·머지는 하지 않는다.** 생성 후 리뷰는 `/bb-review <ws>/<repo> <번호>`.
+
+인자가 없으면 `bb_detect_repo()` 로 저장소·브랜치·푸시 상태를 한 번에 얻는다.
+`git remote get-url origin` 을 직접 부르지 않는다 — remote 이름이 `origin` 이
+아닐 수 있다(실측 저장소에 remote 4개, GitHub 3 + Bitbucket 1).

@@ -669,3 +669,56 @@ export function buildPrPayload({
   }
   return payload;
 }
+
+// ── 로컬 저장소 감지 ──────────────────────────────────────────────────
+// remote 이름이 origin 이라고 가정하지 않는다. 실측한 저장소의 remote 이름이
+// `github-origin` 이었다. 전부 훑어서 bitbucket.org 인 것을 찾는다.
+//
+// 지원 형태:
+//   git@bitbucket.org:ws/repo.git
+//   ssh://git@bitbucket.org/ws/repo.git
+//   https://bitbucket.org/ws/repo.git
+//   https://user@bitbucket.org/ws/repo.git
+export function parseBitbucketRemote(url) {
+  if (typeof url !== "string") return null;
+  const u = url.trim().replace(/\.git$/, "");
+  // scp 형태: [user@]host:path
+  const scp = u.match(/^(?:[^@/]+@)?bitbucket\.org:([^/\s]+)\/([^/\s]+)$/);
+  if (scp) return `${scp[1]}/${scp[2]}`;
+  // URL 형태
+  const url_m = u.match(
+    /^(?:ssh|https?):\/\/(?:[^@/]+@)?bitbucket\.org\/([^/\s]+)\/([^/\s]+)$/,
+  );
+  if (url_m) return `${url_m[1]}/${url_m[2]}`;
+  return null;
+}
+
+// `git remote -v` 출력에서 bitbucket remote 를 찾는다.
+// 여러 개면 fetch 쪽을 우선하고, 그다음 이름이 origin 인 것을 우선한다.
+export function findBitbucketRemote(remoteVerbose) {
+  const found = [];
+  for (const line of String(remoteVerbose ?? "").split("\n")) {
+    const m = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+    if (!m) continue;
+    const repo = parseBitbucketRemote(m[2]);
+    if (repo) found.push({ name: m[1], repo, kind: m[3] });
+  }
+  if (!found.length) return null;
+  const fetches = found.filter((f) => f.kind === "fetch");
+  const pool = fetches.length ? fetches : found;
+  return pool.find((f) => f.name === "origin") ?? pool[0];
+}
+
+// 감지 결과를 사람이 읽을 한 줄로. 왜 못 썼는지가 중요하다.
+export function detectionNote({ is_git, repo, allowed, other_remote }) {
+  if (!is_git) return "git 저장소가 아닙니다. 저장소를 인자로 지정하세요.";
+  if (!repo) {
+    return other_remote
+      ? `remote 가 bitbucket.org 가 아닙니다 (${other_remote}). 이 툴은 Bitbucket Cloud 전용입니다.`
+      : "bitbucket.org remote 가 없습니다. 저장소를 인자로 지정하세요.";
+  }
+  if (allowed === false) {
+    return `${repo} 는 허용 저장소가 아닙니다. allowlist 에 추가하고 세션을 재시작하세요.`;
+  }
+  return `${repo} 를 자동으로 쓸 수 있습니다.`;
+}

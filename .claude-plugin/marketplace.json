@@ -9,7 +9,7 @@
       "name": "bb-pr-review",
       "source": "./plugin",
       "description": "Bitbucket Cloud PR 리뷰용 한국어 스킬과 /bb-review 명령. MCP 서버(bb-mcp)는 별도 등록이 필요하다.",
-      "version": "0.14.1",
+      "version": "0.15.0",
       "author": {
         "name": "adanbae-dev"
       }
