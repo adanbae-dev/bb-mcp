@@ -374,7 +374,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.15.1" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.15.2" });
 
 // 1. 현재 폴더 감지
 server.registerTool(
