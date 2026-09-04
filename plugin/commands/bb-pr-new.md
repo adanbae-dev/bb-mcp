@@ -24,3 +24,5 @@ argument-hint: [workspace/repo] [branch] [destination]
 인자가 없으면 `bb_detect_repo()` 로 저장소·브랜치·푸시 상태를 한 번에 얻는다.
 `git remote get-url origin` 을 직접 부르지 않는다 — remote 이름이 `origin` 이
 아닐 수 있다(실측 저장소에 remote 4개, GitHub 3 + Bitbucket 1).
+
+감지 실패 시 `AskUserQuestion` 선택창으로 저장소를 고르게 한다.

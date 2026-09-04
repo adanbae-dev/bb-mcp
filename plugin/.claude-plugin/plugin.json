@@ -1,6 +1,6 @@
 {
   "name": "bb-pr-review",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Bitbucket Cloud PR 리뷰를 위한 한국어 스킬(/bb-pr-review)과 /bb-review 명령. PR 데이터는 bb-mcp MCP 서버의 bb_* 툴에서 온다 — 서버는 자격증명이 머신별이라 이 플러그인이 설치하지 않으므로 setup.sh 또는 claude mcp add 로 따로 등록한다.",
   "author": {
     "name": "adanbae-dev"
