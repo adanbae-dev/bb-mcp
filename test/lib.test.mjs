@@ -653,3 +653,73 @@ test("allowlistAppendText 결과가 파서를 통과한다", () => {
   const merged = existing + allowlistAppendText("acme/new");
   assert.deepEqual(parseAllowlistFile(merged), ["acme/old", "acme/new"]);
 });
+
+// ── 커밋 · 활동 이력 ──────────────────────────────────────────────────
+import { compactCommit, compactActivity, summarizeActivity, compactFileHistoryEntry } from "../lib.mjs";
+
+const LONG = "제목 줄\n\n본문 첫 줄\n본문 둘째 줄\n";
+
+test("compactCommit 은 기본으로 제목 줄만 남긴다", () => {
+  const c = compactCommit({ hash: "abcdef0123456789", message: LONG, date: "2026-09-03T10:00:00+00:00",
+    author: { user: { display_name: "김대업" }, raw: "kim <k@x>" }, parents: [{ hash: "p1" }] });
+  assert.equal(c.hash, "abcdef012345", "12자로 줄인다");
+  assert.equal(c.subject, "제목 줄");
+  assert.equal(c.body, undefined, "본문은 full 없이는 안 담는다");
+  assert.equal(c.author, "김대업", "display_name 을 우선한다");
+  assert.equal(c.is_merge, false);
+});
+
+test("compactCommit full 은 본문을 담는다", () => {
+  const c = compactCommit({ hash: "a".repeat(40), message: LONG }, { full: true });
+  assert.match(c.body, /본문 첫 줄/);
+  // 제목만인 커밋은 full 이어도 body 를 만들지 않는다
+  assert.equal(compactCommit({ message: "제목만" }, { full: true }).body, undefined);
+});
+
+test("compactCommit 은 parents 가 없으면 머지 여부를 판정하지 않는다", () => {
+  assert.equal(compactCommit({ hash: "x", message: "m" }).is_merge, null,
+    "false 로 두면 조용히 틀린 답이 된다");
+  assert.equal(compactCommit({ parents: [{}, {}], message: "m" }).is_merge, true);
+  assert.equal(compactCommit({}).subject, "");
+  // summary.raw 폴백
+  assert.equal(compactCommit({ summary: { raw: "요약 제목\n본문" } }).subject, "요약 제목");
+});
+
+test("compactActivity 는 네 종류를 구분한다", () => {
+  assert.deepEqual(compactActivity({ approval: { user: { display_name: "이" }, date: "d1" } }),
+    { kind: "approval", user: "이", date: "d1" });
+  assert.equal(compactActivity({ changes_requested: { user: { display_name: "박" } } }).kind,
+    "changes_requested");
+  assert.equal(compactActivity({ update: { author: { display_name: "김" }, state: "OPEN" } }).kind, "update");
+  assert.equal(compactActivity({ comment: { user: { display_name: "최" }, inline: { path: "a" } } }).inline, true);
+  assert.equal(compactActivity({}).kind, "unknown");
+});
+
+test("summarizeActivity 는 승인 후 푸시를 잡아낸다", () => {
+  const withPush = summarizeActivity([
+    { kind: "approval", user: "이", date: "2026-09-01T00:00:00Z" },
+    { kind: "update", user: "김", date: "2026-09-02T00:00:00Z" },
+  ]);
+  assert.equal(withPush.pushed_after_approval, true, "승인이 옛 코드에 대한 것이 된다");
+  assert.deepEqual(withPush.approvals, ["이"]);
+
+  const noPush = summarizeActivity([
+    { kind: "update", user: "김", date: "2026-09-01T00:00:00Z" },
+    { kind: "approval", user: "이", date: "2026-09-02T00:00:00Z" },
+  ]);
+  assert.equal(noPush.pushed_after_approval, false);
+
+  // 승인이 없으면 판정하지 않는다
+  assert.equal(summarizeActivity([{ kind: "update", date: "d" }]).pushed_after_approval, null);
+  assert.deepEqual(summarizeActivity([]).approvals, []);
+  assert.deepEqual(
+    summarizeActivity([{ kind: "changes_requested", user: "박" }]).changes_requested_by, ["박"]);
+});
+
+test("compactFileHistoryEntry 는 해시·경로·크기만 남긴다", () => {
+  assert.deepEqual(
+    compactFileHistoryEntry({ commit: { hash: "0123456789abcdef", links: {} }, path: "a/b.ts", size: 100 }),
+    { hash: "0123456789ab", path: "a/b.ts", size: 100 },
+  );
+  assert.deepEqual(compactFileHistoryEntry({}), { hash: null, path: null, size: null });
+});

@@ -247,7 +247,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 144개 통과 확인
+npm test   # 157개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -442,7 +442,7 @@ claude mcp list          # ✔ Connected 확인
 claude mcp get bitbucket # 실패 시 Issue: 줄에 HTTP 상태
 ```
 
-세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **14개** 보여야 한다.
+세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **17개** 보여야 한다.
 
 `claude mcp add`는 설정만 쓰고 자격증명을 검증하지 않는다. 자격증명이 틀려도
 `add`는 성공하고 `list`에서 실패로 뜬다.
@@ -485,7 +485,7 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | `N번째 줄이 'workspace/repo' 형식이 아닙니다` | 오타 (앞 슬래시 등) | 그 줄 수정 |
 | `읽을 수 없어 모든 저장소를 차단` | 파일 경로 오타/삭제 | 경로 확인 |
 | `hex로 인코딩돼 보입니다` | 키체인 값에 개행 | §5대로 재저장 |
-| 툴이 14개보다 적게 보임 | 옛 버전이 떠 있음 | 세션 재시작 |
+| 툴이 17개보다 적게 보임 | 옛 버전이 떠 있음 | 세션 재시작 |
 | 토큰을 바꿨는데 계속 401 | 토큰 캐시 | 최대 60초 대기 (`BITBUCKET_TOKEN_TTL_MS`) |
 | 서버가 죽은 뒤 복구 안 됨 | stdio는 자동 재연결 없음 | `/mcp`에서 수동 reconnect |
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |
@@ -552,6 +552,8 @@ stderr(= Claude Code의 MCP 로그)에 요청·상태·소요시간·재시도�
 bb_doctor()                             설정 점검 (처음 한 번, 그리고 막힐 때)
 bb_pr_inbox()                           어디에 뭐가 열려 있나 (allowlist 전체)
                                         — 슬래시로는 /bb-prs
+bb_pr_commits(repo, id)                 커밋 위생
+bb_pr_activity(repo, id)                승인 후 푸시가 있었나
 bb_pr_get(repo, id)                     의도·범위 파악 → source_commit 확보
 bb_pr_files(repo, id)                   어디를 볼지 정하기
 bb_pr_diff(repo, id, path=...)          파일 단위로 변경분 읽기

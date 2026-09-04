@@ -97,6 +97,41 @@ function makeApi() {
       res.writeHead(200, { "content-type": "text/plain" });
       return res.end(url.searchParams.get("path") ? "+파일 하나만\n" : BIG_DIFF);
     }
+    if (sub === "/pullrequests/7/commits") {
+      return json({
+        values: [
+          { hash: "aaaaaaaaaaaa1111", message: "feat: 기능 추가\n\n근거 본문",
+            date: "2026-09-03T10:00:00+00:00",
+            author: { user: { display_name: "김대업" } }, parents: [{ hash: "p" }] },
+          { hash: "bbbbbbbbbbbb2222", message: "Merge branch 'x'",
+            date: "2026-09-03T09:00:00+00:00",
+            author: { user: { display_name: "배으뜸" } }, parents: [{ hash: "p1" }, { hash: "p2" }] },
+        ],
+      });
+    }
+    if (sub === "/pullrequests/7/activity") {
+      return json({
+        values: [
+          { update: { author: { display_name: "김대업" }, date: "2026-09-04T00:00:00Z", state: "OPEN" } },
+          { approval: { user: { display_name: "이리뷰" }, date: "2026-09-03T00:00:00Z" } },
+          { changes_requested: { user: { display_name: "박리뷰" }, date: "2026-09-02T00:00:00Z" } },
+        ],
+      });
+    }
+    if (sub && sub.startsWith("/filehistory/")) {
+      return json({
+        values: [
+          { path: "src/a.js", size: 100, commit: { hash: "cccccccccccc3333", links: {} } },
+        ],
+      });
+    }
+    if (sub && sub.startsWith("/commit/")) {
+      return json({
+        hash: sub.slice("/commit/".length), message: "이전 커밋 제목\n본문",
+        date: "2026-06-01T00:00:00+00:00",
+        author: { user: { display_name: "권지현" } }, parents: [{ hash: "p" }],
+      });
+    }
     if (sub === "/pullrequests/7/comments") {
       if (req.method === "POST") {
         let raw = "";
@@ -200,14 +235,25 @@ async function withFileAllowlist(initial, fn, envExtra = {}) {
   }
 }
 
-test("툴 14개가 등록된다", async () => {
+test("툴 17개가 등록된다", async () => {
   await withServer({}, async ({ client }) => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
       "bb_allowlist_add", "bb_allowlist_list", "bb_comment", "bb_doctor", "bb_file",
-      "bb_get", "bb_pr_comments", "bb_pr_diff", "bb_pr_files", "bb_pr_get",
-      "bb_pr_inbox", "bb_pr_list", "bb_repos", "bb_write",
+      "bb_file_history", "bb_get", "bb_pr_activity", "bb_pr_comments", "bb_pr_commits",
+      "bb_pr_diff", "bb_pr_files", "bb_pr_get", "bb_pr_inbox", "bb_pr_list",
+      "bb_repos", "bb_write",
     ]);
+  });
+});
+
+test("PR 승인·거부 툴은 존재하지 않는다", async () => {
+  // 승인은 사람이 한다. 툴을 만들지 않는 것이 그 정책의 실행이다.
+  await withServer({}, async ({ client }) => {
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    for (const n of names) {
+      assert.ok(!/approve|decline|merge/i.test(n), `승인·머지 툴이 생겼다: ${n}`);
+    }
   });
 });
 
@@ -1193,4 +1239,79 @@ test("bb_allowlist_add 는 끝 개행이 없는 파일도 오염시키지 않는
     },
     { BITBUCKET_ALLOW_ALLOWLIST_WRITE: "true" },
   );
+});
+
+// ── 커밋 · 활동 · 파일 이력 ───────────────────────────────────────────
+
+test("bb_pr_commits 는 기본으로 제목만 주고 머지 커밋을 센다", async () => {
+  await withServer({}, async ({ callTool }) => {
+    const out = JSON.parse((await callTool("bb_pr_commits", { repo: "acme/repo-a", id: 7 })).text);
+    assert.equal(out.count, 2);
+    assert.equal(out.merge_commits, 1, "parents 2개인 커밋을 머지로 센다");
+    assert.equal(out.commits[0].subject, "feat: 기능 추가");
+    assert.equal(out.commits[0].body, undefined, "기본은 제목만");
+    assert.equal(out.commits[0].hash.length, 12);
+    assert.ok(out._untrusted, "커밋 메시지도 외부 입력이다");
+  });
+});
+
+test("bb_pr_commits full 은 본문을 담는다", async () => {
+  await withServer({}, async ({ callTool }) => {
+    const out = JSON.parse(
+      (await callTool("bb_pr_commits", { repo: "acme/repo-a", id: 7, full: true })).text,
+    );
+    assert.match(out.commits[0].body, /근거 본문/);
+  });
+});
+
+test("bb_pr_activity 는 승인 후 푸시를 요약에 담는다", async () => {
+  await withServer({}, async ({ callTool }) => {
+    const out = JSON.parse((await callTool("bb_pr_activity", { repo: "acme/repo-a", id: 7 })).text);
+    assert.equal(out.count, 3);
+    assert.deepEqual(out.summary.approvals, ["이리뷰"]);
+    assert.deepEqual(out.summary.changes_requested_by, ["박리뷰"]);
+    assert.equal(out.summary.pushed_after_approval, true, "승인(09-03) 뒤 업데이트(09-04)");
+    assert.deepEqual(out.events.map((e) => e.kind), ["update", "approval", "changes_requested"]);
+  });
+});
+
+test("bb_file_history 는 해시만 오는 이력을 커밋 조회로 채운다", async () => {
+  await withServer({}, async ({ callTool }) => {
+    const out = JSON.parse(
+      (await callTool("bb_file_history", { repo: "acme/repo-a", ref: "main", path: "src/a.js" })).text,
+    );
+    assert.equal(out.enriched, true);
+    assert.equal(out.history[0].hash, "cccccccccccc");
+    assert.equal(out.history[0].subject, "이전 커밋 제목", "커밋 조회로 채워진다");
+    assert.equal(out.history[0].author, "권지현");
+    assert.match(out.history[0].date, /^2026-06-01/);
+  });
+});
+
+test("bb_file_history enrich=false 는 추가 조회를 하지 않는다", async () => {
+  await withServer({}, async ({ callTool, seen }) => {
+    const before = seen.requests.filter((r) => r.includes("/commit/")).length;
+    const out = JSON.parse(
+      (await callTool("bb_file_history", {
+        repo: "acme/repo-a", ref: "main", path: "src/a.js", enrich: false,
+      })).text,
+    );
+    assert.equal(out.enriched, false);
+    assert.equal(out.history[0].subject, undefined);
+    assert.equal(seen.requests.filter((r) => r.includes("/commit/")).length, before);
+  });
+});
+
+test("새 툴들도 allowlist 밖 저장소를 막는다", async () => {
+  await withServer({}, async ({ callTool, seen }) => {
+    const before = seen.requests.length;
+    for (const [tool, args] of [
+      ["bb_pr_commits", { repo: "acme/repo-c", id: 7 }],
+      ["bb_pr_activity", { repo: "other/repo", id: 7 }],
+      ["bb_file_history", { repo: "acme/repo-c", ref: "main", path: "a.js" }],
+    ]) {
+      assert.equal((await callTool(tool, args)).isError, true, tool);
+    }
+    assert.equal(seen.requests.length, before, "네트워크에 닿으면 안 된다");
+  });
 });
