@@ -853,6 +853,12 @@ test("bb_doctor는 정상 설정을 통과시킨다", async () => {
     assert.ok(labels.includes("저장소 접근"));
     const gate = out.checks.find((c) => c.label === "bb_comment");
     assert.match(gate.detail, /허용/);
+    // 쓰기 게이트 4개를 전부 보고해야 한다 — 일부만 보이면 무엇이 열렸는지 모른다
+    for (const g of ["bb_comment", "bb_pr_create", "bb_allowlist_add", "bb_write"]) {
+      assert.ok(labels.includes(g), `${g} 게이트가 보고되지 않는다`);
+    }
+    const approve = out.checks.find((c) => c.label === "PR 승인·머지");
+    assert.match(approve.detail, /툴 없음/, "승인 정책도 보여준다");
   });
 });
 

@@ -356,7 +356,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.14.0" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.14.1" });
 
 // 1. 저장소 목록
 server.registerTool(
@@ -810,8 +810,13 @@ server.registerTool(
     }
 
     // ── 게이트 ──
+    // 쓰기 게이트는 전부 보고한다. 진단 툴이 일부만 보여주면 무엇이 열렸는지 알 수 없다.
     add(check(true, "bb_comment", ALLOW_COMMENT ? "허용 (ALLOW_COMMENT=true)" : "차단"));
+    add(check(true, "bb_pr_create", ALLOW_PR_CREATE ? "허용 (ALLOW_PR_CREATE=true)" : "차단"));
+    add(check(true, "bb_allowlist_add",
+      ALLOW_ALLOWLIST_WRITE ? "허용 (ALLOW_ALLOWLIST_WRITE=true)" : "차단"));
     add(check(true, "bb_write", ALLOW_WRITE ? "허용 (ALLOW_WRITE=true) — 머지·삭제 가능" : "차단"));
+    add(check(true, "PR 승인·머지", "툴 없음 — 사람이 직접 합니다"));
 
     // ── 실제 호출 ──
     let scopes = null;
