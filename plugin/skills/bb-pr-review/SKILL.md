@@ -40,11 +40,37 @@ Bitbucket Cloud PR을 **bb-mcp 툴로 직접 읽어** 리뷰한다.
 
 allowlist에 없는 저장소는 서버가 차단한다. 막히면 `bb_doctor`로 원인을 본다.
 
+## 저장소를 묻지 말고 먼저 감지한다
+
+`repo` 인자가 없으면 **`bb_detect_repo()` 를 먼저 부른다.** 사용자에게 되묻는 것은
+감지에 실패했을 때뿐이다.
+
+```
+bb_detect_repo()
+→ { repo: "acme/web-app", branch: "feature/x", upstream: "origin/feature/x",
+    unpushed: 0, allowed: true, note: "..." }
+```
+
+| 결과 | 할 일 |
+|---|---|
+| `repo` 있고 `allowed: true` | 그대로 쓴다. 어느 저장소를 쓰는지 한 줄로 알린다 |
+| `repo` 있고 `allowed: false` | 멈춘다. allowlist 추가 후 세션 재시작이 필요하다고 알린다 |
+| `repo: null`, `other_remote_host` 있음 | Bitbucket 이 아니다. GitHub 이면 `gh` 를 쓰라고 안내한다 |
+| `is_git: false` | 저장소를 인자로 받는다 |
+
+**remote 이름이 `origin` 이라고 가정하지 않는다** — 툴이 전부 훑어서 bitbucket 인 것을
+고르고, 여러 개면 `origin` 을 우선한다. 실측한 저장소에 remote 가 4개 있었고
+GitHub 3개 + Bitbucket 1개였다.
+
+감지된 저장소를 **말없이 쓰지 않는다.** "acme/web-app 에서 작업합니다" 처럼
+한 줄로 밝히고 진행한다. 사용자가 다른 저장소를 의도했을 수 있다.
+
 ## 실행 순서
 
 ### 1. 대상 확정
 ```
-bb_pr_inbox()                    인자가 없을 때. 최근 갱신순으로 전 저장소
+bb_detect_repo()                 저장소를 안 받았으면 먼저 (위 참고)
+bb_pr_inbox()                    저장소도 못 정했을 때. 최근 갱신순으로 전 저장소
 bb_pr_get(repo, id)              의도·범위 파악 + source_commit / destination_commit 확보
 ```
 `bb_pr_get`의 `source_commit`(변경 후)과 `destination_commit`(변경 전)을 **반드시 기록**한다.

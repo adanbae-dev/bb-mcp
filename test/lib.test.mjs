@@ -777,3 +777,71 @@ test("buildPrPayload 는 잘못된 입력을 거부한다", () => {
     () => buildPrPayload({ title: "t", source_branch: "dev", destination_branch: "dev" }),
     /같습니다/, "자기 자신으로 PR을 만들 수 없다");
 });
+
+// ── 로컬 저장소 감지 ──────────────────────────────────────────────────
+import { parseBitbucketRemote, findBitbucketRemote, detectionNote } from "../lib.mjs";
+
+test("parseBitbucketRemote 는 네 가지 URL 형태를 받는다", () => {
+  for (const u of [
+    "git@bitbucket.org:acme/web-app.git",
+    "git@bitbucket.org:acme/web-app",
+    "ssh://git@bitbucket.org/acme/web-app.git",
+    "https://bitbucket.org/acme/web-app.git",
+    "https://someone@bitbucket.org/acme/web-app",
+  ]) {
+    assert.equal(parseBitbucketRemote(u), "acme/web-app", u);
+  }
+});
+
+test("parseBitbucketRemote 는 bitbucket 이 아니면 null", () => {
+  for (const u of [
+    "git@github.com:acme/web-app.git",
+    "https://github.com/acme/web-app.git",
+    "https://gitlab.com/acme/web-app.git",
+    "https://bitbucket.example.com/acme/web-app",  // 도메인이 다르다
+    "not a url", "", null, undefined,
+  ]) {
+    assert.equal(parseBitbucketRemote(u), null, String(u));
+  }
+});
+
+test("findBitbucketRemote 는 remote 이름을 가정하지 않는다", () => {
+  // 실측: remote 4개 중 GitHub 3 + Bitbucket 1, bitbucket 쪽 이름이 origin 이었다
+  const real = [
+    "github-origin\tgit@github.com:duse-corp/x.git (fetch)",
+    "github-origin\tgit@github.com:duse-corp/x.git (push)",
+    "old\tgit@github.com:duse-corp/y.git (fetch)",
+    "origin\tgit@bitbucket.org:acme/web-app.git (fetch)",
+    "origin\tgit@bitbucket.org:acme/web-app.git (push)",
+  ].join("\n");
+  assert.deepEqual(findBitbucketRemote(real), { name: "origin", repo: "acme/web-app", kind: "fetch" });
+
+  // bitbucket 이 origin 이 아닐 때도 찾는다
+  const notOrigin = "bb\tgit@bitbucket.org:acme/other.git (fetch)\norigin\tgit@github.com:a/b.git (fetch)";
+  assert.equal(findBitbucketRemote(notOrigin).repo, "acme/other");
+
+  // 여러 bitbucket remote 면 origin 을 우선
+  const many = [
+    "upstream\tgit@bitbucket.org:acme/upstream.git (fetch)",
+    "origin\tgit@bitbucket.org:acme/mine.git (fetch)",
+  ].join("\n");
+  assert.equal(findBitbucketRemote(many).repo, "acme/mine");
+
+  assert.equal(findBitbucketRemote("origin\tgit@github.com:a/b.git (fetch)"), null);
+  assert.equal(findBitbucketRemote(""), null);
+  assert.equal(findBitbucketRemote(null), null);
+});
+
+test("detectionNote 는 실패 이유를 구분한다", () => {
+  assert.match(detectionNote({ is_git: false }), /git 저장소가 아닙니다/);
+  assert.match(detectionNote({ is_git: true, repo: null }), /bitbucket\.org remote 가 없습니다/);
+  assert.match(
+    detectionNote({ is_git: true, repo: null, other_remote: "github.com" }),
+    /github\.com.*Bitbucket Cloud 전용/s,
+  );
+  assert.match(
+    detectionNote({ is_git: true, repo: "a/b", allowed: false }),
+    /허용 저장소가 아닙니다.*재시작/s,
+  );
+  assert.match(detectionNote({ is_git: true, repo: "a/b", allowed: true }), /자동으로 쓸 수 있습니다/);
+});

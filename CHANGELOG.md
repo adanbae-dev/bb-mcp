@@ -4,6 +4,38 @@
 0.1.0~0.5.0 은 저장소를 만들기 전 개발 중에 지나간 버전이라 최초 커밋에
 함께 들어갔다.
 
+## 0.15.0 — 현재 폴더의 저장소 자동 감지
+
+`repo` 를 매번 인자로 받는 대신 현재 폴더에서 찾는다.
+
+### 근거
+MCP 서버의 cwd 가 Claude Code 가 띄운 프로젝트 디렉터리라는 것을 실측으로 확인했다 —
+서버 인스턴스 3개가 각자 다른 프로젝트(`peterpanz-web`, `brawser`, `bb-mcp`)에
+붙어 있었다. 그래서 서버에서 git 을 읽으면 "지금 어느 저장소인가" 를 알 수 있다.
+
+에이전트의 Bash 로 감지하는 방법도 있지만, 에이전트의 cwd 는 세션 중에 `cd` 로
+바뀔 수 있고 스킬마다 파싱을 반복해야 한다. 서버 cwd 는 기동 시 고정이라 더 안정적이다.
+
+### 추가
+- **`bb_detect_repo`** — `repo`·`remote`·`branch`·`upstream`·`unpushed`·`allowed` 를
+  한 번에 준다. 읽기 전용이고 네트워크를 쓰지 않는다. git 인자는 전부 고정이라
+  사용자 입력이 명령에 들어가지 않는다.
+- 스킬·명령 5개가 `repo` 없이 불리면 이걸 먼저 부른다
+
+### remote 이름을 가정하지 않는다
+`git remote get-url origin` 만 보면 틀린다. 실측한 저장소에 remote 가 **4개** 있었고
+GitHub 3개 + Bitbucket 1개였다. 전부 훑어 bitbucket 을 고르고, 여러 개면 `origin` 을
+우선한다. SSH·HTTPS·`ssh://`·`user@` 네 형태를 받는다.
+
+조사 중에 `git remote -v | head -2` 로 잘라 봐서 그 저장소를 GitHub 전용이라고
+오판했다. 툴이 전체를 훑어 올바르게 `aptner/mono-peter-web` 을 찾아냈다.
+
+### 실패 이유를 구분한다
+`is_git: false` / `repo: null` + `other_remote_host` / `allowed: false` 를
+각각 다른 `note` 로 알린다. 스킬은 감지된 저장소를 **말없이 쓰지 않고** 한 줄로 밝힌다.
+
+툴 20개, 테스트 176개.
+
 ## 0.14.1 — bb_doctor 가 쓰기 게이트를 전부 보고
 
 `ALLOW_PR_CREATE` 를 켜고 재등록했는데 `bb_doctor` 출력에 나오지 않았다.

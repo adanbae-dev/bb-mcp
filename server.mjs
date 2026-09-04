@@ -35,10 +35,12 @@ import {
   compactCommit,
   compactFileHistoryEntry,
   compactRepo,
+  detectionNote,
   diffAllowlist,
   allowlistAppendText,
   encodePathSegments,
   extractScopeInfo,
+  findBitbucketRemote,
   mapLimit,
   numberLines,
   parseAllowlistFile,
@@ -249,6 +251,22 @@ function getToken() {
   return cachedToken;
 }
 
+// 서버의 cwd 는 Claude Code 가 띄운 프로젝트 디렉터리다(실측 확인).
+// 그래서 여기서 git 을 읽으면 "지금 어느 저장소에서 작업 중인가" 를 알 수 있다.
+// 인자는 전부 고정이다 — 사용자 입력을 명령에 넣지 않는다.
+function git(...args) {
+  try {
+    return execFileSync("git", args, {
+      encoding: "utf8",
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5000,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
 function authHeader() {
   return "Basic " + Buffer.from(`${EMAIL}:${getToken()}`).toString("base64");
 }
@@ -356,9 +374,83 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.14.1" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.15.0" });
 
-// 1. 저장소 목록
+// 1. 현재 폴더 감지
+server.registerTool(
+  "bb_detect_repo",
+  {
+    title: "현재 폴더의 저장소 감지",
+    description:
+      "서버가 실행 중인 디렉터리가 git 저장소이고 bitbucket.org remote 가 있으면 " +
+      "workspace/repo 를 알려준다. 다른 bb_* 툴의 repo 인자를 사용자에게 묻지 않고 " +
+      "채우는 데 쓴다. 읽기 전용이고 git 을 읽기만 한다. " +
+      "감지에 실패한 이유(git 아님 / bitbucket 아님 / allowlist 밖)를 note 로 알려준다.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const root = git("rev-parse", "--show-toplevel");
+      if (!root) {
+        return okJson({
+          cwd: process.cwd(),
+          is_git: false,
+          note: detectionNote({ is_git: false }),
+        });
+      }
+
+      const remotes = git("remote", "-v") ?? "";
+      const hit = findBitbucketRemote(remotes);
+      // bitbucket 이 아니면 무엇이었는지 알려준다 — GitHub 이면 gh 를 쓰라고 안내할 수 있다
+      const otherHost = hit
+        ? null
+        : (remotes.match(/[@/]([\w.-]+\.[a-z]{2,})[:/]/) ?? [])[1] ?? null;
+
+      const out = {
+        cwd: process.cwd(),
+        git_root: root,
+        is_git: true,
+        remote: hit?.name ?? null,
+        repo: hit?.repo ?? null,
+        other_remote_host: otherHost,
+        branch: git("rev-parse", "--abbrev-ref", "HEAD"),
+      };
+
+      if (out.branch === "HEAD") out.detached = true;
+
+      const upstream = git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}");
+      out.upstream = upstream;
+      if (upstream) {
+        const ahead = git("rev-list", "--count", `${upstream}..HEAD`);
+        // 푸시되지 않은 커밋은 PR에 포함되지 않는다. PR을 만들기 전에 알아야 한다.
+        out.unpushed = ahead == null ? null : Number(ahead);
+      }
+
+      if (out.repo) {
+        let allowed = null;
+        try {
+          const list = resolveAllowedRepos();
+          allowed = list.length === 0 ? true : list.includes(out.repo);
+        } catch {
+          allowed = false; // allowlist 를 읽을 수 없으면 쓸 수 없다
+        }
+        out.allowed = allowed;
+      }
+
+      out.note = detectionNote({
+        is_git: true,
+        repo: out.repo,
+        allowed: out.allowed,
+        other_remote: otherHost,
+      });
+      return okJson(out);
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// 2. 저장소 목록
 server.registerTool(
   "bb_repos",
   {
@@ -397,7 +489,7 @@ server.registerTool(
   }),
 );
 
-// 2. 전체 저장소 PR 인박스
+// 3. 전체 저장소 PR 인박스
 server.registerTool(
   "bb_pr_inbox",
   {
@@ -458,7 +550,7 @@ server.registerTool(
   }),
 );
 
-// 3. 파일 본문
+// 4. 파일 본문
 server.registerTool(
   "bb_file",
   {
@@ -508,7 +600,7 @@ server.registerTool(
   }),
 );
 
-// 4. PR 목록
+// 5. PR 목록
 server.registerTool(
   "bb_pr_list",
   {
@@ -540,7 +632,7 @@ server.registerTool(
   }),
 );
 
-// 5. PR 상세
+// 6. PR 상세
 server.registerTool(
   "bb_pr_get",
   {
@@ -564,7 +656,7 @@ server.registerTool(
   }),
 );
 
-// 6. 변경 파일 목록 (diffstat)
+// 7. 변경 파일 목록 (diffstat)
 server.registerTool(
   "bb_pr_files",
   {
@@ -596,7 +688,7 @@ server.registerTool(
   }),
 );
 
-// 7. diff
+// 8. diff
 server.registerTool(
   "bb_pr_diff",
   {
@@ -644,7 +736,7 @@ server.registerTool(
   }),
 );
 
-// 8. 기존 코멘트
+// 9. 기존 코멘트
 server.registerTool(
   "bb_pr_comments",
   {
@@ -678,7 +770,7 @@ server.registerTool(
   }),
 );
 
-// 9. 코멘트 작성
+// 10. 코멘트 작성
 server.registerTool(
   "bb_comment",
   {
@@ -735,7 +827,7 @@ server.registerTool(
   }),
 );
 
-// 10. 자기 진단
+// 11. 자기 진단
 server.registerTool(
   "bb_doctor",
   {
@@ -877,7 +969,7 @@ server.registerTool(
   },
 );
 
-// 11. PR 커밋 목록
+// 12. PR 커밋 목록
 server.registerTool(
   "bb_pr_commits",
   {
@@ -916,7 +1008,7 @@ server.registerTool(
   }),
 );
 
-// 12. PR 활동 이력
+// 13. PR 활동 이력
 server.registerTool(
   "bb_pr_activity",
   {
@@ -950,7 +1042,7 @@ server.registerTool(
   }),
 );
 
-// 13. 파일 이력
+// 14. 파일 이력
 server.registerTool(
   "bb_file_history",
   {
@@ -1006,7 +1098,7 @@ server.registerTool(
   }),
 );
 
-// 14. 브랜치 커밋 (PR 초안용)
+// 15. 브랜치 커밋 (PR 초안용)
 server.registerTool(
   "bb_branch_commits",
   {
@@ -1048,7 +1140,7 @@ server.registerTool(
   }),
 );
 
-// 15. PR 생성
+// 16. PR 생성
 server.registerTool(
   "bb_pr_create",
   {
@@ -1124,7 +1216,7 @@ server.registerTool(
   }),
 );
 
-// 16. allowlist 조회
+// 17. allowlist 조회
 server.registerTool(
   "bb_allowlist_list",
   {
@@ -1201,7 +1293,7 @@ server.registerTool(
   },
 );
 
-// 17. allowlist 추가
+// 18. allowlist 추가
 server.registerTool(
   "bb_allowlist_add",
   {
@@ -1267,7 +1359,7 @@ server.registerTool(
   }),
 );
 
-// 18. 범용 읽기 (전용 툴로 안 되는 경로용)
+// 19. 범용 읽기 (전용 툴로 안 되는 경로용)
 server.registerTool(
   "bb_get",
   {
@@ -1289,7 +1381,7 @@ server.registerTool(
   ),
 );
 
-// 19. 범용 쓰기 (기본 차단)
+// 20. 범용 쓰기 (기본 차단)
 server.registerTool(
   "bb_write",
   {
