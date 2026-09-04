@@ -15,7 +15,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
-| `plugin/commands/` | `/bb-review`, `/bb-doctor`, `/bb-repos` |
+| `plugin/commands/` | `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 변경 이력 |
 | `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
@@ -39,7 +39,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 
 ```bash
 npm i @modelcontextprotocol/sdk@1 zod@3
-npm test                                              # 121개
+npm test                                              # 144개
 
 # 토큰 (-w 뒤에 값을 직접. 대화형 프롬프트는 128자에서 잘린다)
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
@@ -71,7 +71,7 @@ Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.3
 
 ## 1-1. 슬래시 명령으로 쓰기
 
-MCP 서버만 등록하면 툴 12개가 생기지만, **툴은 슬래시 명령이 아니다.**
+MCP 서버만 등록하면 툴 14개가 생기지만, **툴은 슬래시 명령이 아니다.**
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
 `/bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
 
@@ -129,8 +129,8 @@ claude plugin update bb-pr-review@bb-mcp
 
 | | 무엇 | 어디에 |
 |---|---|---|
-| MCP 서버 | 툴 12개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
-| 스킬·명령 | `/bb-pr-review`, `/bb-review` | 플러그인 캐시 **또는** `~/.claude/skills/` |
+| MCP 서버 | 툴 14개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
+| 스킬·명령 | `/bb-pr-review`, `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` | 플러그인 캐시 **또는** `~/.claude/skills/` |
 
 가장 짧은 길은 `setup.sh` 하나다. 서버 등록과 스킬 설치를 6단계로 다 한다.
 
@@ -151,8 +151,16 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 ```
 
-세션 재시작 후 `/bb-pr-review`와 `/bb-review`가 뜬다.
+세션 재시작 후 아래가 뜬다.
 설치본은 `~/.claude/plugins/cache/bb-mcp/bb-pr-review/<버전>/` 에 놓인다.
+
+| 명령 | 하는 일 |
+|---|---|
+| `/bb-prs` | **열린 PR 목록만** 본다. 리뷰는 시작하지 않는다 |
+| `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다 |
+| `/bb-pr-review` | 위와 같음 (스킬 직접 호출) |
+| `/bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
+| `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
 
 로컬 저장소에서 개발 중이면 경로를 쓴다. **`.` 은 거부되고 `./` 만 받는다.**
 
@@ -286,7 +294,9 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 저장소 하나가 실패해도 나머지는 그대로 오고, 실패는 `errors`에 모인다.
 저장소가 여럿일 때 리뷰의 출발점이다.
 
-리뷰 흐름을 슬래시로 시작하려면 `/bb-review` (플러그인, §1-1)를 쓴다.
+목록만 볼 때는 `/bb-prs`, 리뷰까지 갈 때는 `/bb-review` 를 쓴다 (플러그인, §1-1).
+`/bb-prs` 는 `bb_pr_inbox` 를 불러 허용 저장소 전체의 열린 PR을 최근 갱신순으로
+보여주고 거기서 끝낸다 — 리뷰를 시작하지 않는다.
 `bb_pr_inbox` → `bb_pr_get` → `bb_pr_files` → `bb_pr_diff(path)` → `bb_pr_comments`
 순서를 `bb-pr-review` 스킬이 안내한다.
 
@@ -491,7 +501,17 @@ bb_allowlist_add("acme/new")     파일에 한 줄 추가 (게이트 필요)
 
 `/bb-repos` 와 `/bb-repos add acme/new` 로도 부를 수 있다.
 
-`bb_allowlist_list` 는 **기동 시 스냅샷과 현재 파일의 차이**를 보여준다.
+`bb_allowlist_list` 는 **설정이 어떤 상태든 응답한다.** 허용 목록이 없거나(`denied`)
+파일 파싱에 실패해도 오류로 끝내지 않고 `mode`·`warning`·`error`·`fix` 를 돌려준다 —
+상태를 설명해야 할 때 툴이 안 뜨면 쓸모가 없기 때문이다.
+
+```json
+{ "mode": "denied", "active": [], "active_count": 0,
+  "warning": "허용 저장소가 설정되지 않아 모든 저장소가 차단됩니다.",
+  "fix": "~/.config/bb-mcp/allowed-repos 에 workspace/repo 를 한 줄씩 적고 세션을 재시작하세요. ..." }
+```
+
+그리고 **기동 시 스냅샷과 현재 파일의 차이**를 보여준다.
 "추가했는데 왜 안 먹나"의 답이 여기 있다.
 
 ```json
@@ -569,12 +589,12 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 npm test    # 144개
 ```
 
-- `test/lib.test.mjs` (60) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
+- `test/lib.test.mjs` (66) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
   diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
-- `test/integration.test.mjs` (44) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
+- `test/integration.test.mjs` (74) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   스냅샷/재읽기·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,
   **퍼센트 인코딩 경로 탈출 차단**, **토큰 유출 방어**, 동시성 상한,

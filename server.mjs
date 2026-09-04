@@ -347,7 +347,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.11.1" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.12.0" });
 
 // 1. 저장소 목록
 server.registerTool(

@@ -405,6 +405,15 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 
 `setup.sh` 6단계가 대신한다. 자세한 것은 [README.md §1-1](./README.md).
 
+세션 재시작 후 세 개가 뜬다.
+
+| 명령 | 하는 일 |
+|---|---|
+| `/bb-prs` | 열린 PR 목록만 (리뷰 시작 안 함) |
+| `/bb-review` | PR 리뷰 (인자 없으면 목록부터) |
+| `/bb-doctor` | 설정 진단 (`quick` 이면 네트워크 없이) |
+| `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
+
 **저장소 루트에 `.mcp.json` 을 만들지 않는다.** 프로젝트 스코프 MCP 설정으로
 읽혀서 user 스코프 등록을 덮어쓰고, 서버가 `CONNECTION_CLOSED` 로 죽는다.
 
@@ -476,12 +485,13 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | `N번째 줄이 'workspace/repo' 형식이 아닙니다` | 오타 (앞 슬래시 등) | 그 줄 수정 |
 | `읽을 수 없어 모든 저장소를 차단` | 파일 경로 오타/삭제 | 경로 확인 |
 | `hex로 인코딩돼 보입니다` | 키체인 값에 개행 | §5대로 재저장 |
-| 툴이 2개만 보임 | 옛 버전이 떠 있음 | 세션 재시작 |
+| 툴이 14개보다 적게 보임 | 옛 버전이 떠 있음 | 세션 재시작 |
 | 토큰을 바꿨는데 계속 401 | 토큰 캐시 | 최대 60초 대기 (`BITBUCKET_TOKEN_TTL_MS`) |
 | 서버가 죽은 뒤 복구 안 됨 | stdio는 자동 재연결 없음 | `/mcp`에서 수동 reconnect |
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |
 | `허용되지 않은 저장소` 인데 파일엔 있음 | 기동 후 파일을 고쳤다 | `bb_allowlist_list` 로 `pending_add` 확인 → 세션 재시작 |
-| `허용 저장소가 설정되지 않아` | allowlist 미설정 | 파일을 만들고 `_FILE` 을 등록. 제한 없이 쓰려면 `BITBUCKET_ALLOW_ALL_REPOS=true` |
+| `허용 저장소가 설정되지 않아` | allowlist 미설정(`denied`) | 파일을 만들고 `_FILE` 을 등록. 제한 없이 쓰려면 `BITBUCKET_ALLOW_ALL_REPOS=true` |
+| 상태를 모르겠다 | — | `/bb-repos` 는 `denied`·파싱 실패에서도 응답한다. `mode`·`fix` 를 본다 |
 | 원인을 모르겠다 | — | `bb_doctor` 먼저. 그다음 `BITBUCKET_DEBUG=true`로 재등록 후 MCP 로그 |
 | MCP 연결만 실패하고 이유가 없음 | 설정 오류 | 서버가 stderr에 원인을 남기고 exit 1 한다. 로그를 본다 |
 | `CONNECTION_CLOSED` | 프로젝트 `.mcp.json` 이 user 스코프를 덮어씀 | 저장소 루트의 `.mcp.json` 을 지운다 (§7) |
@@ -541,6 +551,7 @@ stderr(= Claude Code의 MCP 로그)에 요청·상태·소요시간·재시도�
 ```
 bb_doctor()                             설정 점검 (처음 한 번, 그리고 막힐 때)
 bb_pr_inbox()                           어디에 뭐가 열려 있나 (allowlist 전체)
+                                        — 슬래시로는 /bb-prs
 bb_pr_get(repo, id)                     의도·범위 파악 → source_commit 확보
 bb_pr_files(repo, id)                   어디를 볼지 정하기
 bb_pr_diff(repo, id, path=...)          파일 단위로 변경분 읽기
