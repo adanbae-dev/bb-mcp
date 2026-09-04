@@ -623,3 +623,49 @@ export function compactFileHistoryEntry(e) {
     size: e?.size ?? null,
   };
 }
+
+// ── PR 생성 ───────────────────────────────────────────────────────────
+// 브랜치 이름은 `/` 를 포함하므로 경로에 넣을 때 인코딩이 필요하다.
+// 그리고 Bitbucket 의 PR 검색은 state 를 별도 파라미터로 주면 무시한다 —
+// q 안에 넣어야 한다(실측: state=OPEN + q=... 는 모든 상태 10건,
+// q='state="OPEN" AND ...' 는 1건).
+export function openPrByBranchQuery(branch) {
+  const esc = String(branch).replace(/"/g, '\\"');
+  return `state="OPEN" AND source.branch.name="${esc}"`;
+}
+
+export function buildPrPayload({
+  title,
+  source_branch,
+  destination_branch,
+  description,
+  reviewers,
+  close_source_branch = false,
+}) {
+  if (typeof title !== "string" || !title.trim()) {
+    throw new Error("title 은 비어 있을 수 없습니다");
+  }
+  if (typeof source_branch !== "string" || !source_branch.trim()) {
+    throw new Error("source_branch 가 필요합니다");
+  }
+  if (source_branch === destination_branch) {
+    throw new Error(`source 와 destination 이 같습니다: ${source_branch}`);
+  }
+  const payload = {
+    title: title.trim(),
+    source: { branch: { name: source_branch } },
+    // 기본은 false. 남의 브랜치를 자동으로 지우지 않는다.
+    close_source_branch: close_source_branch === true,
+  };
+  if (destination_branch) {
+    payload.destination = { branch: { name: destination_branch } };
+  }
+  if (typeof description === "string" && description.trim()) {
+    payload.description = description;
+  }
+  if (Array.isArray(reviewers) && reviewers.length) {
+    // Bitbucket 은 uuid 를 받는다. display name 으로는 지정할 수 없다.
+    payload.reviewers = reviewers.map((uuid) => ({ uuid }));
+  }
+  return payload;
+}
