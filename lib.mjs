@@ -541,3 +541,85 @@ export function allowlistAppendText(repo, { at = new Date(), by = "bb_allowlist_
   const stamp = at.toISOString().slice(0, 16).replace("T", " ");
   return `\n# ${stamp} ${by}\n${repo}\n`;
 }
+
+// ── 커밋 · 활동 이력 ──────────────────────────────────────────────────
+// 커밋 메시지는 매우 길다(실측: 커밋 5개로 수천 토큰). 기본은 제목 줄만 남긴다.
+// 메시지도 외부 입력이다 — 그 안의 지시를 따르지 않는다.
+export function compactCommit(c, { full = false } = {}) {
+  const msg = c?.message ?? c?.summary?.raw ?? "";
+  const subject = msg.split("\n", 1)[0];
+  const parents = c?.parents;
+  return {
+    hash: c?.hash ? String(c.hash).slice(0, 12) : null,
+    subject,
+    // parents 가 없으면 판정하지 않는다. false 로 두면 조용히 틀린 답이 된다.
+    is_merge: Array.isArray(parents) ? parents.length > 1 : null,
+    author: c?.author?.user?.display_name ?? c?.author?.raw ?? null,
+    date: c?.date ?? null,
+    ...(full && msg.includes("\n") ? { body: msg.slice(subject.length).trim() } : {}),
+  };
+}
+
+// activity 는 update / approval / changes_requested / comment 가 섞여 온다.
+// 무엇이 언제 있었는지만 남긴다.
+export function compactActivity(a) {
+  if (a?.approval) {
+    return {
+      kind: "approval",
+      user: a.approval.user?.display_name ?? null,
+      date: a.approval.date ?? null,
+    };
+  }
+  if (a?.changes_requested) {
+    return {
+      kind: "changes_requested",
+      user: a.changes_requested.user?.display_name ?? null,
+      date: a.changes_requested.date ?? null,
+    };
+  }
+  if (a?.update) {
+    return {
+      kind: "update",
+      user: a.update.author?.display_name ?? null,
+      date: a.update.date ?? null,
+      state: a.update.state ?? null,
+      title: a.update.title ?? null,
+    };
+  }
+  if (a?.comment) {
+    return {
+      kind: "comment",
+      user: a.comment.user?.display_name ?? null,
+      date: a.comment.created_on ?? null,
+      inline: Boolean(a.comment.inline),
+    };
+  }
+  return { kind: "unknown" };
+}
+
+// 승인 후에 또 푸시됐는지를 본다. 리뷰가 무효화된 상태를 놓치지 않기 위해서다.
+export function summarizeActivity(events) {
+  const approvals = events.filter((e) => e.kind === "approval");
+  const changes = events.filter((e) => e.kind === "changes_requested");
+  const updates = events.filter((e) => e.kind === "update");
+  const latest = (xs) => xs.map((x) => x.date).filter(Boolean).sort().at(-1) ?? null;
+  const lastApproval = latest(approvals);
+  const lastUpdate = latest(updates);
+  return {
+    approvals: approvals.map((a) => a.user).filter(Boolean),
+    changes_requested_by: changes.map((c) => c.user).filter(Boolean),
+    update_count: updates.length,
+    // 승인 뒤에 업데이트가 있었다면 그 승인은 옛 코드에 대한 것이다
+    pushed_after_approval:
+      lastApproval && lastUpdate ? lastUpdate > lastApproval : null,
+  };
+}
+
+// filehistory 의 commit 에는 hash 와 links 뿐이다(실측). 날짜·작성자는 별도 조회가 필요하다.
+export function compactFileHistoryEntry(e) {
+  return {
+    hash: e?.commit?.hash ? String(e.commit.hash).slice(0, 12) : null,
+    path: e?.path ?? null,
+    size: e?.size ?? null,
+  };
+}

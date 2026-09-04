@@ -71,7 +71,7 @@ Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.3
 
 ## 1-1. 슬래시 명령으로 쓰기
 
-MCP 서버만 등록하면 툴 14개가 생기지만, **툴은 슬래시 명령이 아니다.**
+MCP 서버만 등록하면 툴 17개가 생기지만, **툴은 슬래시 명령이 아니다.**
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
 `/bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
 
@@ -129,7 +129,7 @@ claude plugin update bb-pr-review@bb-mcp
 
 | | 무엇 | 어디에 |
 |---|---|---|
-| MCP 서버 | 툴 14개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
+| MCP 서버 | 툴 17개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
 | 스킬·명령 | `/bb-pr-review`, `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` | 플러그인 캐시 **또는** `~/.claude/skills/` |
 
 가장 짧은 길은 `setup.sh` 하나다. 서버 등록과 스킬 설치를 6단계로 다 한다.
@@ -279,6 +279,9 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_pr_list(repo, state?, limit?)` | 한 저장소의 PR 목록. 기본 `OPEN`, 20개, 최근 갱신순 |
 | `bb_pr_get(repo, id)` | PR 상세 — 제목·설명·브랜치·커밋 해시·리뷰어·승인 |
 | `bb_pr_files(repo, id)` | 변경 파일 + 추가/삭제 줄 수 (diffstat) |
+| `bb_pr_commits(repo, id, full?)` | PR을 이루는 커밋. **기본은 제목 줄만** |
+| `bb_pr_activity(repo, id)` | 승인·변경요청·업데이트 이력 |
+| `bb_file_history(repo, ref, path, enrich?)` | 파일을 건드린 커밋 이력 |
 | `bb_pr_diff(repo, id, path?, context?, max_bytes?)` | unified diff 원문 |
 | `bb_pr_comments(repo, id, inline_only?)` | 이미 달린 코멘트 |
 | `bb_file(repo, ref, path, start?, end?)` | 커밋·브랜치의 파일 전문, **줄 번호 포함** |
@@ -329,13 +332,19 @@ PR 리뷰 중이라면 `ref`에 `bb_pr_get`의 `source_commit`을 넣는다.
 
 ```
 bb_pr_inbox()                           어디에 뭐가 열려 있나 (저장소 전체)
-bb_pr_get(repo, id)                     의도·범위 파악 → source_commit 확보
+bb_pr_get(repo, id)                     의도·범위 파악 → source/destination_commit
 bb_pr_files(repo, id)                   어디를 볼지 정하기
+bb_pr_commits(repo, id)                 커밋 위생 — 포맷과 기능이 섞였나
+bb_pr_activity(repo, id)                승인 후 푸시가 있었나 (승인이 유효한가)
 bb_pr_diff(repo, id, path=...)          파일 단위로 변경분 읽기
 bb_file(repo, source_commit, path)      맥락이 필요하면 파일 전문 + 줄 번호
+bb_file(repo, destination_commit, ...)  이 PR의 회귀인지 base 대조
+bb_file_history(repo, ref, path)        사전 존재라면 언제 들어왔나
 bb_pr_comments(repo, id)                이미 지적된 것 확인 (중복 방지)
 bb_comment(repo, id, body, path, line)  줄 단위로 코멘트
 ```
+
+**승인·거부는 없다.** 툴을 만들지 않았고 만들 계획도 없다 — 아래 §7 참고.
 
 `bb_pr_diff`는 큰 PR에서 `max_bytes`(기본 60000)에 걸려 줄 경계로 잘린다.
 실측한 PR 하나의 전체 diff가 77KB였다. **`path` 없이 부르지 않는 걸 기본으로 삼는다.**
@@ -586,15 +595,15 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 144개
+npm test    # 157개
 ```
 
-- `test/lib.test.mjs` (66) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
+- `test/lib.test.mjs` (72) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
   diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
-- `test/integration.test.mjs` (74) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
+- `test/integration.test.mjs` (81) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   스냅샷/재읽기·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,
   **퍼센트 인코딩 경로 탈출 차단**, **토큰 유출 방어**, 동시성 상한,
