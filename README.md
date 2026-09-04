@@ -220,6 +220,7 @@ MCP 설정으로 읽히고, 프로젝트 스코프는 user 스코프를 덮어�
 | `BITBUCKET_ALLOWED_REPOS_FILE` | × | allowlist 파일 경로. 기본 `~/.config/bb-mcp/allowed-repos` |
 | `BITBUCKET_ALLOWLIST_RELOAD` | × | `true`면 파일을 호출마다 재읽기. 기본은 기동 시 스냅샷 |
 | `BITBUCKET_ALLOW_ALLOWLIST_WRITE` | × | `true`가 아니면 `bb_allowlist_add` 차단 |
+| `BITBUCKET_ALLOW_ALL_REPOS` | × | `true`면 제한 없이 동작. 명시하지 않으면 전부 차단 |
 | `BITBUCKET_ALLOW_COMMENT` | × | `true`가 아니면 `bb_comment` 차단. PR 코멘트만 열린다 |
 | `BITBUCKET_ALLOW_WRITE` | × | `true`가 아니면 `bb_write` 전면 차단. 머지·삭제까지 열린다 |
 | `BITBUCKET_TIMEOUT_MS` | × | 요청 타임아웃. 기본 30000. 양의 정수가 아니면 기동 실패 |
@@ -340,7 +341,8 @@ bb_comment(repo, id, body, path, line)  줄 단위로 코멘트
 | `BITBUCKET_ALLOWED_REPOS` 설정 | `env` | 재등록 + 세션 재시작 |
 | `BITBUCKET_ALLOWED_REPOS_FILE` 설정 | `file` | 파일 편집 + 세션 재시작 |
 | 기본 파일이 기동 시점에 존재 | `file` | 파일 편집 + 세션 재시작 |
-| 셋 다 없음 | `open` | 제한 없음. 토큰 스코프에만 의존 |
+| `BITBUCKET_ALLOW_ALL_REPOS=true` | `open` | 제한 없음. 토큰 스코프에만 의존 |
+| 아무것도 없음 | `denied` | **전부 차단** |
 
 env가 파일보다 우선한다. `bb_doctor` 응답의 `allowlist 소스`가 지금 어느 모드이고
 언제 읽는지 알려준다.
@@ -368,41 +370,48 @@ chmod 600 ~/.config/bb-mcp/allowed-repos
 
 만든 뒤 **세션을 재시작해야 반영된다**(기동 시 스냅샷).
 
-### 안 만들면 전체가 열린다 ⚠️
+### 안 만들면 전부 차단된다
 
 모드 결정은 기동 시 이 순서다.
 
 ```
-BITBUCKET_ALLOWED_REPOS 있음        → env  (그 목록)
-BITBUCKET_ALLOWED_REPOS_FILE 있음   → file (파일이 없어도 file. 전체 차단)
+BITBUCKET_ALLOWED_REPOS 있음        → env    (그 목록)
+BITBUCKET_ALLOWED_REPOS_FILE 있음   → file   (파일이 없어도 file. 전체 차단)
 기본 파일이 존재                     → file
-셋 다 없음                          → open (제한 없음)
+BITBUCKET_ALLOW_ALL_REPOS=true      → open   (제한 없음)
+아무것도 없음                        → denied (전부 차단)
 ```
 
-`claude mcp add` 에 `_FILE` 을 주지 않고 파일도 만들지 않으면 **`open` 모드로
-뜨고 토큰이 접근 가능한 모든 저장소가 열린다.** 그래서 서버가 기동 시
-stderr 에 경고한다.
+설정을 빠뜨리면 **아무 저장소에도 접근하지 않는다.** 서버는 뜨지만 모든 호출이
+막히고, 여는 방법을 알려준다.
 
 ```
-[bb-mcp] 경고: 허용 저장소 목록이 없어 제한 없이 동작합니다.
-  토큰이 접근 가능한 모든 저장소가 열립니다.
+[bb-mcp] 허용 저장소가 설정되지 않아 모든 저장소를 차단합니다.
+  ~/.config/bb-mcp/allowed-repos 에 'workspace/repo' 를 한 줄씩 적고 세션을 재시작하세요.
+  제한 없이 쓰려면 BITBUCKET_ALLOW_ALL_REPOS=true 를 명시해야 합니다.
 ```
 
-`setup.sh` 는 항상 `_FILE` 을 넣으므로 이 상태로 빠지지 않는다
-(파일이 비면 전체 차단, 즉 fail-closed).
+**전체 개방은 명시적으로 켜야 한다.** `BITBUCKET_ALLOW_ALL_REPOS=true` 없이는
+`open` 모드가 되지 않는다. `BITBUCKET_ALLOWED_REPOS=""`(빈 문자열)도 개방이 아니라
+차단이다.
+
+> **0.11.0 이전에는 반대였다.** 아무 설정이 없으면 `open` 으로 뜨고 stderr 경고만
+> 남겼다. "레포를 지정 안 했으면 접근 안 하겠지"라는 자연스러운 기대와 어긋나서
+> 기본을 뒤집었다. `open` 을 쓰던 설정은 `BITBUCKET_ALLOW_ALL_REPOS=true` 를
+> 추가해야 한다.
 
 ### 저장소 이름을 모를 때
 
 `open` 모드에서 한 번 나열해 목록을 만든 뒤 좁히는 방법이 있다.
 
 ```
-bb_repos({ workspace: "acme" })     # open 모드에서만 동작
+bb_repos({ workspace: "acme" })     # BITBUCKET_ALLOW_ALL_REPOS=true 에서만 동작
 ```
 
 allowlist 가 설정돼 있으면 `bb_repos` 는 **그 목록만** 조회하고
 워크스페이스 전체는 노출하지 않는다. 즉 순서가 이렇다.
 
-1. allowlist 없이 등록 → `open` 모드 (경고가 뜬다)
+1. `BITBUCKET_ALLOW_ALL_REPOS=true` 로 등록 → `open` 모드 (경고가 뜬다)
 2. `bb_repos({workspace})` 로 저장소 이름 확인
 3. 파일에 필요한 것만 적고 `_FILE` 을 넣어 재등록
 4. 세션 재시작 → `file` 모드로 좁혀짐
@@ -557,7 +566,7 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 139개
+npm test    # 141개
 ```
 
 - `test/lib.test.mjs` (60) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,

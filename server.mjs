@@ -130,20 +130,30 @@ const ENV_REPOS = (process.env.BITBUCKET_ALLOWED_REPOS ?? "")
 const EXPLICIT_FILE = process.env.BITBUCKET_ALLOWED_REPOS_FILE;
 const DEFAULT_FILE = path.join(os.homedir(), ".config", "bb-mcp", "allowed-repos");
 
+// 전체 개방은 명시적으로 켜야 한다. 설정을 빠뜨렸을 때 넓게 열리면 안 된다.
+const ALLOW_ALL_REPOS = process.env.BITBUCKET_ALLOW_ALL_REPOS === "true";
+
 const ALLOWLIST = (() => {
   if (ENV_REPOS.length) return { mode: "env", repos: ENV_REPOS };
   if (EXPLICIT_FILE) return { mode: "file", file: expandHome(EXPLICIT_FILE) };
   if (existsSync(DEFAULT_FILE)) return { mode: "file", file: DEFAULT_FILE };
-  return { mode: "open" };
+  if (ALLOW_ALL_REPOS) return { mode: "open" };
+  return { mode: "denied" };
 })();
 
-// allowlist 없이 뜨면 토큰 스코프 전체가 열린다. 조용히 그렇게 되면 안 된다.
 if (ALLOWLIST.mode === "open") {
+  // 명시적으로 켠 것이지만, 무엇이 열렸는지는 알려준다
   process.stderr.write(
-    "[bb-mcp] 경고: 허용 저장소 목록이 없어 제한 없이 동작합니다.\n" +
+    "[bb-mcp] 경고: BITBUCKET_ALLOW_ALL_REPOS=true — 제한 없이 동작합니다.\n" +
       "  토큰이 접근 가능한 모든 저장소가 열립니다.\n" +
-      `  좁히려면 ${DEFAULT_FILE} 에 'workspace/repo' 를 한 줄씩 적고 세션을 재시작하세요.\n` +
-      "  또는 BITBUCKET_ALLOWED_REPOS 로 직접 지정합니다.\n",
+      `  좁히려면 ${DEFAULT_FILE} 에 'workspace/repo' 를 한 줄씩 적고 세션을 재시작하세요.\n`,
+  );
+} else if (ALLOWLIST.mode === "denied") {
+  process.stderr.write(
+    "[bb-mcp] 허용 저장소가 설정되지 않아 모든 저장소를 차단합니다.\n" +
+      `  ${DEFAULT_FILE} 에 'workspace/repo' 를 한 줄씩 적고 세션을 재시작하세요.\n` +
+      "  또는 BITBUCKET_ALLOWED_REPOS 로 직접 지정합니다.\n" +
+      "  제한 없이 쓰려면 BITBUCKET_ALLOW_ALL_REPOS=true 를 명시해야 합니다.\n",
   );
 }
 
@@ -188,9 +198,16 @@ if (ALLOWLIST.mode === "file" && !ALLOWLIST_RELOAD) {
   }
 }
 
+const DENIED_HINT =
+  `허용 저장소가 설정되지 않아 모든 저장소를 차단합니다.\n` +
+  `  ${DEFAULT_FILE} 에 'workspace/repo' 를 한 줄씩 적고 세션을 재시작하세요.\n` +
+  `  또는 BITBUCKET_ALLOWED_REPOS 로 지정합니다. ` +
+  `제한 없이 쓰려면 BITBUCKET_ALLOW_ALL_REPOS=true 를 명시해야 합니다.`;
+
 function resolveAllowedRepos() {
   if (ALLOWLIST.mode === "env") return ALLOWLIST.repos;
-  if (ALLOWLIST.mode === "open") return []; // 제한 없음. 접근 범위는 토큰 스코프에 맡긴다
+  if (ALLOWLIST.mode === "denied") throw new Error(DENIED_HINT);
+  if (ALLOWLIST.mode === "open") return []; // 명시적 전체 개방
   if (ALLOWLIST_RELOAD) return readAllowlistFile();
   if (snapshotError) throw snapshotError;
   return snapshot;
@@ -330,7 +347,7 @@ const guard = (fn) => async (args) => {
 };
 
 // ── 서버 ─────────────────────────────────────────────────────────────
-const server = new McpServer({ name: "bitbucket-personal", version: "0.10.0" });
+const server = new McpServer({ name: "bitbucket-personal", version: "0.11.0" });
 
 // 1. 저장소 목록
 server.registerTool(
@@ -764,9 +781,12 @@ server.registerTool(
 
     // ── allowlist ──
     let allowed = null;
-    if (ALLOWLIST.mode === "open") {
+    if (ALLOWLIST.mode === "denied") {
+      add(check(false, "허용 저장소", "설정되지 않아 모든 저장소가 차단됩니다",
+        `${DEFAULT_FILE} 에 workspace/repo 를 한 줄씩 적고 세션을 재시작하세요`));
+    } else if (ALLOWLIST.mode === "open") {
       allowed = [];
-      add(check(true, "allowlist", "없음 (open) — 접근 범위가 토큰 스코프 전체입니다"));
+      add(check(true, "allowlist", "BITBUCKET_ALLOW_ALL_REPOS=true — 토큰 스코프 전체가 열립니다"));
     } else {
       const when =
         ALLOWLIST.mode !== "file" ? "기동 시 고정" : ALLOWLIST_RELOAD ? "호출마다 재읽기" : "기동 시 스냅샷";
@@ -861,7 +881,8 @@ server.registerTool(
     };
 
     if (ALLOWLIST.mode === "open") {
-      out.warning = "허용 목록이 없어 제한 없이 동작합니다. 토큰 스코프 전체가 열립니다.";
+      out.warning =
+        "BITBUCKET_ALLOW_ALL_REPOS=true — 제한 없이 동작합니다. 토큰 스코프 전체가 열립니다.";
       return okJson(out);
     }
 

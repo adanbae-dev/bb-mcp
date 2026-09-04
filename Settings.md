@@ -117,9 +117,11 @@ allowlist 는 **저장소 밖**(`~/.config/bb-mcp/allowed-repos`)에 둔다.
 파일이 비어 있으면 **모든 저장소가 차단된다**(fail-closed). 정상이다.
 저장소를 넣고 세션을 재시작하면 열린다.
 
-손으로 `claude mcp add` 할 때 `_FILE` 을 빼고 파일도 안 만들면 **`open` 모드로
-뜨고 토큰 스코프 전체가 열린다.** 서버가 기동 시 stderr 에 경고하지만,
-그 경고를 못 보면 넓게 열린 상태로 쓰게 된다. `bb_doctor` 로 확인한다.
+손으로 `claude mcp add` 할 때 `_FILE` 을 빼고 파일도 안 만들면 **전부 차단된다**
+(0.11.0부터). 서버는 뜨지만 모든 호출이 막히고 stderr 에 여는 방법을 알려준다.
+
+제한 없이 쓰려면 `BITBUCKET_ALLOW_ALL_REPOS=true` 를 명시해야 한다.
+`BITBUCKET_ALLOWED_REPOS=""`(빈 문자열)는 개방이 아니라 차단이다.
 
 ### Bitbucket 종류
 
@@ -245,7 +247,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 139개 통과 확인
+npm test   # 141개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -479,6 +481,7 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | 서버가 죽은 뒤 복구 안 됨 | stdio는 자동 재연결 없음 | `/mcp`에서 수동 reconnect |
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |
 | `허용되지 않은 저장소` 인데 파일엔 있음 | 기동 후 파일을 고쳤다 | `bb_allowlist_list` 로 `pending_add` 확인 → 세션 재시작 |
+| `허용 저장소가 설정되지 않아` | allowlist 미설정 | 파일을 만들고 `_FILE` 을 등록. 제한 없이 쓰려면 `BITBUCKET_ALLOW_ALL_REPOS=true` |
 | 원인을 모르겠다 | — | `bb_doctor` 먼저. 그다음 `BITBUCKET_DEBUG=true`로 재등록 후 MCP 로그 |
 | MCP 연결만 실패하고 이유가 없음 | 설정 오류 | 서버가 stderr에 원인을 남기고 exit 1 한다. 로그를 본다 |
 | `CONNECTION_CLOSED` | 프로젝트 `.mcp.json` 이 user 스코프를 덮어씀 | 저장소 루트의 `.mcp.json` 을 지운다 (§7) |

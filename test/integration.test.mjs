@@ -434,18 +434,40 @@ test("env가 설정돼 있으면 파일보다 우선한다", async () => {
   );
 });
 
-test("env도 파일도 없으면 제한 없음(토큰 스코프에 맡김)", async () => {
+test("env도 파일도 없으면 전체 차단이다 (기본값)", async () => {
+  // 설정을 빠뜨렸을 때 넓게 열리면 안 된다. 이게 기본이다.
   await withServer(
     { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: "" },
+    async ({ callTool, seen }) => {
+      const before = seen.requests.length;
+      for (const [tool, args] of [
+        ["bb_pr_list", { repo: "other/anything" }],
+        ["bb_repos", { workspace: "acme" }],
+        ["bb_get", { path: "/repositories/other/anything" }],
+      ]) {
+        const r = await callTool(tool, args);
+        assert.equal(r.isError, true, `${tool} 가 막혀야 한다`);
+        assert.match(r.text, /허용 저장소가 설정되지 않아/);
+      }
+      assert.equal(seen.requests.length, before, "네트워크에 닿으면 안 된다");
+    },
+  );
+});
+
+test("ALLOW_ALL_REPOS=true 를 명시해야 열린다", async () => {
+  await withServer(
+    {
+      BITBUCKET_ALLOWED_REPOS: "",
+      BITBUCKET_ALLOWED_REPOS_FILE: "",
+      BITBUCKET_ALLOW_ALL_REPOS: "true",
+    },
     async ({ callTool }) => {
-      // allowlist가 없으므로 workspace를 요구한다
       const need = await callTool("bb_repos", {});
       assert.equal(need.isError, true);
       assert.match(need.text, /workspace를 지정/);
 
       const out = JSON.parse((await callTool("bb_repos", { workspace: "acme" })).text);
       assert.equal(out.source, "api");
-      // allowlist에 없던 저장소도 통과한다
       assert.equal((await callTool("bb_pr_list", { repo: "other/anything" })).isError, false);
     },
   );
@@ -485,8 +507,21 @@ test("bb_pr_inbox는 최근 갱신순으로 정렬한다", async () => {
 });
 
 test("bb_pr_inbox는 allowlist가 없으면 거부한다", async () => {
+  // 기본(denied)은 해석 자체가 막히고, 명시적 open 에서는 대상을 못 정해 막힌다
   await withServer(
     { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: "" },
+    async ({ callTool }) => {
+      const r = await callTool("bb_pr_inbox", {});
+      assert.equal(r.isError, true);
+      assert.match(r.text, /허용 저장소가 설정되지 않아/);
+    },
+  );
+  await withServer(
+    {
+      BITBUCKET_ALLOWED_REPOS: "",
+      BITBUCKET_ALLOWED_REPOS_FILE: "",
+      BITBUCKET_ALLOW_ALL_REPOS: "true",
+    },
     async ({ callTool }) => {
       const r = await callTool("bb_pr_inbox", {});
       assert.equal(r.isError, true);
@@ -933,8 +968,8 @@ test("bb_doctor는 스냅샷인지 재읽기인지 알려준다", async () => {
   );
 });
 
-test("allowlist 없이 뜨면 stderr 에 개방 경고를 남긴다", async () => {
-  // 조용히 전체 개방되면 안 된다. 경고는 stderr(= MCP 로그)로 간다.
+test("설정이 없으면 stderr 에 차단 안내를 남긴다", async () => {
+  // 조용히 전체 개방되던 것을 뒤집었다. 이제 차단이고, 여는 방법을 알려준다.
   const { spawn } = await import("node:child_process");
   const tmp = mkdtempSync(path.join(os.tmpdir(), "bb-mcp-open-"));
   try {
@@ -952,8 +987,8 @@ test("allowlist 없이 뜨면 stderr 에 개방 경고를 남긴다", async () =
       p.stderr.on("data", (b) => (buf += b));
       setTimeout(() => { p.kill("SIGKILL"); resolve(buf); }, 900);
     });
-    assert.match(err, /제한 없이 동작/);
-    assert.match(err, /모든 저장소가 열립니다/);
+    assert.match(err, /모든 저장소를 차단합니다/);
+    assert.match(err, /BITBUCKET_ALLOW_ALL_REPOS=true/, "여는 방법을 알려줘야 한다");
     assert.ok(!err.includes(TOKEN), "경고에 토큰이 실리면 안 된다");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -994,13 +1029,31 @@ test("bb_allowlist_list 는 파일이 기동 시점과 갈린 것을 알려준�
   });
 });
 
-test("bb_allowlist_list 는 open 모드를 경고한다", async () => {
+test("bb_allowlist_list 는 명시적 open 모드를 경고한다", async () => {
   await withServer(
-    { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: "" },
+    {
+      BITBUCKET_ALLOWED_REPOS: "",
+      BITBUCKET_ALLOWED_REPOS_FILE: "",
+      BITBUCKET_ALLOW_ALL_REPOS: "true",
+    },
     async ({ callTool }) => {
       const out = JSON.parse((await callTool("bb_allowlist_list", {})).text);
       assert.equal(out.mode, "open");
-      assert.match(out.warning, /제한 없이/);
+      assert.match(out.warning, /ALLOW_ALL_REPOS=true/);
+    },
+  );
+});
+
+test("bb_doctor 는 설정 없음을 문제로 보고한다", async () => {
+  await withServer(
+    { BITBUCKET_ALLOWED_REPOS: "", BITBUCKET_ALLOWED_REPOS_FILE: "" },
+    async ({ callTool }) => {
+      const out = JSON.parse((await callTool("bb_doctor", { probe: false })).text);
+      assert.equal(out.ok, false);
+      const p = out.problems.find((x) => x.label === "허용 저장소");
+      assert.ok(p, "허용 저장소를 문제로 잡아야 한다");
+      assert.match(p.detail, /설정되지 않아/);
+      assert.match(p.fix, /한 줄씩/);
     },
   );
 });
