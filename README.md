@@ -15,6 +15,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
+| `plugin/skills/bb-pr-create/` | PR 생성 스킬 (초안 작성 + 중복 검사) |
 | `plugin/commands/` | `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 변경 이력 |
 | `.mcp.json.example` | project 스코프 설정 예시 |
@@ -71,7 +72,7 @@ Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.3
 
 ## 1-1. 슬래시 명령으로 쓰기
 
-MCP 서버만 등록하면 툴 17개가 생기지만, **툴은 슬래시 명령이 아니다.**
+MCP 서버만 등록하면 툴 19개가 생기지만, **툴은 슬래시 명령이 아니다.**
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
 `/bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
 
@@ -129,7 +130,7 @@ claude plugin update bb-pr-review@bb-mcp
 
 | | 무엇 | 어디에 |
 |---|---|---|
-| MCP 서버 | 툴 17개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
+| MCP 서버 | 툴 19개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
 | 스킬·명령 | `/bb-pr-review`, `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` | 플러그인 캐시 **또는** `~/.claude/skills/` |
 
 가장 짧은 길은 `setup.sh` 하나다. 서버 등록과 스킬 설치를 6단계로 다 한다.
@@ -157,6 +158,7 @@ claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 | 명령 | 하는 일 |
 |---|---|
 | `/bb-prs` | **열린 PR 목록만** 본다. 리뷰는 시작하지 않는다 |
+| `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성 |
 | `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다 |
 | `/bb-pr-review` | 위와 같음 (스킬 직접 호출) |
 | `/bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
@@ -228,6 +230,7 @@ MCP 설정으로 읽히고, 프로젝트 스코프는 user 스코프를 덮어�
 | `BITBUCKET_ALLOWED_REPOS_FILE` | × | allowlist 파일 경로. 기본 `~/.config/bb-mcp/allowed-repos` |
 | `BITBUCKET_ALLOWLIST_RELOAD` | × | `true`면 파일을 호출마다 재읽기. 기본은 기동 시 스냅샷 |
 | `BITBUCKET_ALLOW_ALLOWLIST_WRITE` | × | `true`가 아니면 `bb_allowlist_add` 차단 |
+| `BITBUCKET_ALLOW_PR_CREATE` | × | `true`가 아니면 `bb_pr_create` 차단. `ALLOW_COMMENT` 와 별개 |
 | `BITBUCKET_ALLOW_ALL_REPOS` | × | `true`면 제한 없이 동작. 명시하지 않으면 전부 차단 |
 | `BITBUCKET_ALLOW_COMMENT` | × | `true`가 아니면 `bb_comment` 차단. PR 코멘트만 열린다 |
 | `BITBUCKET_ALLOW_WRITE` | × | `true`가 아니면 `bb_write` 전면 차단. 머지·삭제까지 열린다 |
@@ -282,6 +285,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_pr_commits(repo, id, full?)` | PR을 이루는 커밋. **기본은 제목 줄만** |
 | `bb_pr_activity(repo, id)` | 승인·변경요청·업데이트 이력 |
 | `bb_file_history(repo, ref, path, enrich?)` | 파일을 건드린 커밋 이력 |
+| `bb_branch_commits(repo, branch, exclude?)` | 브랜치가 대상보다 앞선 커밋 (PR 초안용) |
 | `bb_pr_diff(repo, id, path?, context?, max_bytes?)` | unified diff 원문 |
 | `bb_pr_comments(repo, id, inline_only?)` | 이미 달린 코멘트 |
 | `bb_file(repo, ref, path, start?, end?)` | 커밋·브랜치의 파일 전문, **줄 번호 포함** |
@@ -318,6 +322,7 @@ PR 리뷰 중이라면 `ref`에 `bb_pr_get`의 `source_commit`을 넣는다.
 | 툴 | 게이트 | 하는 일 |
 |---|---|---|
 | `bb_comment(repo, id, body, path?, line?, side?, parent_id?)` | `ALLOW_COMMENT` | PR 코멘트 |
+| `bb_pr_create(repo, title, source_branch, ...)` | `ALLOW_PR_CREATE` | PR 생성. 중복이면 안 만든다 |
 | `bb_allowlist_add(repo)` | `ALLOW_ALLOWLIST_WRITE` | 허용 저장소 파일에 한 줄 추가 |
 | `bb_write(method, path, body?)` | `ALLOW_WRITE` | 범용 POST/PUT/DELETE |
 
@@ -345,6 +350,22 @@ bb_comment(repo, id, body, path, line)  줄 단위로 코멘트
 ```
 
 **승인·거부는 없다.** 툴을 만들지 않았고 만들 계획도 없다 — 아래 §7 참고.
+
+### PR 만들기
+
+```
+bb_branch_commits(repo, branch, exclude=<대상>)   무엇이 올라가는지
+bb_pr_create(repo, title, source_branch, ...)     확인받은 뒤 생성
+```
+
+`/bb-pr-new` 로 부르면 커밋을 읽어 **제목·설명 초안을 만들고 확인을 받은 뒤** 생성한다.
+`bb_pr_create` 는 같은 source 브랜치로 열린 PR이 이미 있으면 만들지 않고 그 PR을 알려준다 —
+푸시만으로 반영되므로 새로 만들 필요가 없다.
+
+`BITBUCKET_ALLOW_PR_CREATE` 게이트가 필요하고 **`ALLOW_COMMENT` 로는 열리지 않는다.**
+생성은 검토를 요청하는 일이라 승인·머지와 성질이 다르지만, 팀에 알림이 가므로 별도 게이트를 둔다.
+
+`close_source_branch` 는 기본 `false` 다. 요청 없이 브랜치를 지우지 않는다.
 
 `bb_pr_diff`는 큰 PR에서 `max_bytes`(기본 60000)에 걸려 줄 경계로 잘린다.
 실측한 PR 하나의 전체 diff가 77KB였다. **`path` 없이 부르지 않는 걸 기본으로 삼는다.**
@@ -595,15 +616,15 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 157개
+npm test    # 168개
 ```
 
-- `test/lib.test.mjs` (72) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
+- `test/lib.test.mjs` (78) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
   diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
-- `test/integration.test.mjs` (81) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
+- `test/integration.test.mjs` (86) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   스냅샷/재읽기·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,
   **퍼센트 인코딩 경로 탈출 차단**, **토큰 유출 방어**, 동시성 상한,

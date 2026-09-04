@@ -247,7 +247,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 157개 통과 확인
+npm test   # 168개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -410,6 +410,7 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 | 명령 | 하는 일 |
 |---|---|
 | `/bb-prs` | 열린 PR 목록만 (리뷰 시작 안 함) |
+| `/bb-pr-new` | PR 초안 작성 + 확인 후 생성 (`ALLOW_PR_CREATE` 필요) |
 | `/bb-review` | PR 리뷰 (인자 없으면 목록부터) |
 | `/bb-doctor` | 설정 진단 (`quick` 이면 네트워크 없이) |
 | `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
@@ -442,7 +443,7 @@ claude mcp list          # ✔ Connected 확인
 claude mcp get bitbucket # 실패 시 Issue: 줄에 HTTP 상태
 ```
 
-세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **17개** 보여야 한다.
+세션 안에서는 `/mcp`로 상태와 툴 개수를 본다. 툴이 **19개** 보여야 한다.
 
 `claude mcp add`는 설정만 쓰고 자격증명을 검증하지 않는다. 자격증명이 틀려도
 `add`는 성공하고 `list`에서 실패로 뜬다.
@@ -485,7 +486,7 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | `N번째 줄이 'workspace/repo' 형식이 아닙니다` | 오타 (앞 슬래시 등) | 그 줄 수정 |
 | `읽을 수 없어 모든 저장소를 차단` | 파일 경로 오타/삭제 | 경로 확인 |
 | `hex로 인코딩돼 보입니다` | 키체인 값에 개행 | §5대로 재저장 |
-| 툴이 17개보다 적게 보임 | 옛 버전이 떠 있음 | 세션 재시작 |
+| 툴이 19개보다 적게 보임 | 옛 버전이 떠 있음 | 세션 재시작 |
 | 토큰을 바꿨는데 계속 401 | 토큰 캐시 | 최대 60초 대기 (`BITBUCKET_TOKEN_TTL_MS`) |
 | 서버가 죽은 뒤 복구 안 됨 | stdio는 자동 재연결 없음 | `/mcp`에서 수동 reconnect |
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |

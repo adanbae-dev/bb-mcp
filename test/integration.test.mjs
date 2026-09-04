@@ -55,6 +55,31 @@ function makeApi() {
         links: { html: { href: `https://bitbucket.org/${repo}` } },
       });
     }
+    if (sub === "/pullrequests" && req.method === "POST") {
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      return req.on("end", () => {
+        const body = JSON.parse(raw);
+        seen.posted.push(body);
+        json({
+          id: 999, title: body.title, state: "OPEN",
+          author: { display_name: "me" },
+          source: { branch: { name: body.source.branch.name }, commit: { hash: "s1" } },
+          destination: { branch: { name: body.destination?.branch?.name ?? "main" }, commit: { hash: "d1" } },
+          close_source_branch: body.close_source_branch,
+          links: { html: { href: "https://bitbucket.org/pr/999" } },
+        });
+      });
+    }
+    if (sub === "/pullrequests" && url.searchParams.get("q")) {
+      const q = url.searchParams.get("q");
+      seen.requests.push(`Q=${q}`);
+      // dup-branch 로 물으면 기존 PR이 있다고 답한다
+      if (q.includes("dup-branch")) {
+        return json({ values: [{ id: 41, title: "기존 PR", links: { html: { href: "https://bitbucket.org/pr/41" } } }] });
+      }
+      return json({ values: [] });
+    }
     if (sub === "/pullrequests" && repo.endsWith("/repo-broken")) {
       res.writeHead(500, { "content-type": "application/json" });
       return res.end(JSON.stringify({ error: { message: "이 저장소는 고장남" } }));
@@ -96,6 +121,17 @@ function makeApi() {
     if (sub === "/pullrequests/7/diff") {
       res.writeHead(200, { "content-type": "text/plain" });
       return res.end(url.searchParams.get("path") ? "+파일 하나만\n" : BIG_DIFF);
+    }
+    if (sub && sub.startsWith("/commits/")) {
+      const ex = url.searchParams.get("exclude");
+      seen.requests.push(`EXCLUDE=${ex ?? "none"}`);
+      return json({
+        values: [
+          { hash: "dddddddddddd4444", message: "feat: 브랜치 커밋\n\n왜 그랬는지",
+            date: "2026-09-04T00:00:00+00:00",
+            author: { user: { display_name: "김대업" } }, parents: [{ hash: "p" }] },
+        ],
+      });
     }
     if (sub === "/pullrequests/7/commits") {
       return json({
@@ -235,14 +271,14 @@ async function withFileAllowlist(initial, fn, envExtra = {}) {
   }
 }
 
-test("툴 17개가 등록된다", async () => {
+test("툴 19개가 등록된다", async () => {
   await withServer({}, async ({ client }) => {
     const names = (await client.listTools()).tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
-      "bb_allowlist_add", "bb_allowlist_list", "bb_comment", "bb_doctor", "bb_file",
-      "bb_file_history", "bb_get", "bb_pr_activity", "bb_pr_comments", "bb_pr_commits",
-      "bb_pr_diff", "bb_pr_files", "bb_pr_get", "bb_pr_inbox", "bb_pr_list",
-      "bb_repos", "bb_write",
+      "bb_allowlist_add", "bb_allowlist_list", "bb_branch_commits", "bb_comment",
+      "bb_doctor", "bb_file", "bb_file_history", "bb_get", "bb_pr_activity",
+      "bb_pr_comments", "bb_pr_commits", "bb_pr_create", "bb_pr_diff", "bb_pr_files",
+      "bb_pr_get", "bb_pr_inbox", "bb_pr_list", "bb_repos", "bb_write",
     ]);
   });
 });
@@ -1313,5 +1349,86 @@ test("새 툴들도 allowlist 밖 저장소를 막는다", async () => {
       assert.equal((await callTool(tool, args)).isError, true, tool);
     }
     assert.equal(seen.requests.length, before, "네트워크에 닿으면 안 된다");
+  });
+});
+
+// ── PR 생성 ───────────────────────────────────────────────────────────
+
+test("bb_pr_create 는 기본 차단이고 ALLOW_COMMENT 로 열리지 않는다", async () => {
+  await withServer({ BITBUCKET_ALLOW_COMMENT: "true" }, async ({ callTool, seen }) => {
+    const r = await callTool("bb_pr_create", {
+      repo: "acme/repo-a", title: "t", source_branch: "feat/x",
+    });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /BITBUCKET_ALLOW_PR_CREATE=true/);
+    assert.match(r.text, /ALLOW_COMMENT 와 별개/);
+    assert.equal(seen.posted.length, 0, "차단됐으면 POST 가 나가면 안 된다");
+  });
+});
+
+test("게이트를 켜면 PR을 만들고 승인은 하지 않는다", async () => {
+  await withServer({ BITBUCKET_ALLOW_PR_CREATE: "true" }, async ({ callTool, seen }) => {
+    const out = JSON.parse((await callTool("bb_pr_create", {
+      repo: "acme/repo-a", title: "feat: 무언가", source_branch: "feat/x",
+      destination_branch: "dev", description: "본문",
+    })).text);
+    assert.equal(out.created, true);
+    assert.equal(out.pull_request.id, 999);
+    assert.match(out.note, /승인·머지는 하지 않았습니다/);
+
+    assert.equal(seen.posted.length, 1);
+    const body = seen.posted[0];
+    assert.equal(body.title, "feat: 무언가");
+    assert.deepEqual(body.source, { branch: { name: "feat/x" } });
+    assert.deepEqual(body.destination, { branch: { name: "dev" } });
+    assert.equal(body.close_source_branch, false, "요청 없이 브랜치를 지우지 않는다");
+    assert.equal("reviewers" in body, false);
+  });
+});
+
+test("같은 브랜치로 열린 PR이 있으면 만들지 않는다", async () => {
+  await withServer({ BITBUCKET_ALLOW_PR_CREATE: "true" }, async ({ callTool, seen }) => {
+    const out = JSON.parse((await callTool("bb_pr_create", {
+      repo: "acme/repo-a", title: "t", source_branch: "dup-branch",
+    })).text);
+    assert.equal(out.created, false);
+    assert.match(out.reason, /이미 있습니다/);
+    assert.equal(out.existing[0].id, 41);
+    assert.match(out.hint, /푸시하면/);
+    assert.equal(seen.posted.length, 0, "중복이면 POST 하지 않는다");
+  });
+});
+
+test("중복 검사는 state 를 q 안에 넣는다", async () => {
+  // 별도 파라미터로 주면 Bitbucket 이 무시해서 머지된 PR까지 걸린다
+  await withServer({ BITBUCKET_ALLOW_PR_CREATE: "true" }, async ({ callTool, seen }) => {
+    await callTool("bb_pr_create", { repo: "acme/repo-a", title: "t", source_branch: "feat/y" });
+    const q = seen.requests.find((r) => r.startsWith("Q="));
+    assert.ok(q, "중복 검사 쿼리가 나가야 한다");
+    assert.match(q, /state="OPEN" AND source\.branch\.name="feat\/y"/);
+  });
+});
+
+test("bb_pr_create 는 allowlist 밖 저장소를 막는다", async () => {
+  await withServer({ BITBUCKET_ALLOW_PR_CREATE: "true" }, async ({ callTool, seen }) => {
+    const before = seen.requests.length;
+    const r = await callTool("bb_pr_create", {
+      repo: "other/repo", title: "t", source_branch: "x",
+    });
+    assert.equal(r.isError, true);
+    assert.equal(seen.requests.length, before, "네트워크에 닿으면 안 된다");
+  });
+});
+
+test("bb_branch_commits 는 exclude 를 전달한다", async () => {
+  await withServer({}, async ({ callTool, seen }) => {
+    const out = JSON.parse((await callTool("bb_branch_commits", {
+      repo: "acme/repo-a", branch: "feat/x", exclude: "dev",
+    })).text);
+    assert.equal(out.exclude, "dev");
+    assert.equal(out.commits[0].subject, "feat: 브랜치 커밋");
+    assert.equal(out.commits[0].body, undefined, "기본은 제목만");
+    assert.ok(out._untrusted);
+    assert.ok(seen.requests.includes("EXCLUDE=dev"), "exclude 가 실제로 전달돼야 한다");
   });
 });

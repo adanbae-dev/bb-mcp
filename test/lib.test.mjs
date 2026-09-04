@@ -723,3 +723,57 @@ test("compactFileHistoryEntry 는 해시·경로·크기만 남긴다", () => {
   );
   assert.deepEqual(compactFileHistoryEntry({}), { hash: null, path: null, size: null });
 });
+
+// ── PR 생성 ───────────────────────────────────────────────────────────
+import { openPrByBranchQuery, buildPrPayload } from "../lib.mjs";
+
+test("openPrByBranchQuery 는 state 를 q 안에 넣는다", () => {
+  // 실측: state 를 별도 파라미터로 주면 무시되고 모든 상태가 온다(10건 vs 1건).
+  const q = openPrByBranchQuery("feature/ABC-1");
+  assert.match(q, /^state="OPEN" AND source\.branch\.name="feature\/ABC-1"$/);
+  // 따옴표가 든 브랜치명은 이스케이프한다
+  assert.match(openPrByBranchQuery('a"b'), /source\.branch\.name="a\\"b"/);
+});
+
+test("buildPrPayload 는 최소 형태를 만든다", () => {
+  assert.deepEqual(buildPrPayload({ title: " 제목 ", source_branch: "feat/x" }), {
+    title: "제목",
+    source: { branch: { name: "feat/x" } },
+    close_source_branch: false,
+  });
+});
+
+test("buildPrPayload 는 close_source_branch 를 기본 false 로 둔다", () => {
+  assert.equal(buildPrPayload({ title: "t", source_branch: "a" }).close_source_branch, false);
+  assert.equal(
+    buildPrPayload({ title: "t", source_branch: "a", close_source_branch: "true" }).close_source_branch,
+    false, "문자열 'true' 를 참으로 보지 않는다");
+  assert.equal(
+    buildPrPayload({ title: "t", source_branch: "a", close_source_branch: true }).close_source_branch,
+    true);
+});
+
+test("buildPrPayload 는 선택 필드를 조건부로 넣는다", () => {
+  const p = buildPrPayload({
+    title: "t", source_branch: "a", destination_branch: "dev",
+    description: "본문", reviewers: ["uuid-1", "uuid-2"],
+  });
+  assert.deepEqual(p.destination, { branch: { name: "dev" } });
+  assert.equal(p.description, "본문");
+  assert.deepEqual(p.reviewers, [{ uuid: "uuid-1" }, { uuid: "uuid-2" }]);
+
+  // 빈 값은 넣지 않는다
+  const bare = buildPrPayload({ title: "t", source_branch: "a", description: "  ", reviewers: [] });
+  assert.equal("description" in bare, false);
+  assert.equal("reviewers" in bare, false);
+  assert.equal("destination" in bare, false);
+});
+
+test("buildPrPayload 는 잘못된 입력을 거부한다", () => {
+  assert.throws(() => buildPrPayload({ source_branch: "a" }), /title/);
+  assert.throws(() => buildPrPayload({ title: "  ", source_branch: "a" }), /title/);
+  assert.throws(() => buildPrPayload({ title: "t" }), /source_branch/);
+  assert.throws(
+    () => buildPrPayload({ title: "t", source_branch: "dev", destination_branch: "dev" }),
+    /같습니다/, "자기 자신으로 PR을 만들 수 없다");
+});
