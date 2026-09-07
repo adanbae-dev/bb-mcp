@@ -43,7 +43,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 
 ```bash
 npm i @modelcontextprotocol/sdk@1 zod@3
-npm test                                              # 189개
+npm test                                              # 191개
 
 # 토큰 (-w 뒤에 값을 직접. 대화형 프롬프트는 128자에서 잘린다)
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
@@ -503,11 +503,16 @@ bb_pr_create(repo, title, source_branch, ...)     확인받은 뒤 생성
 | `BITBUCKET_ALLOWED_REPOS` 설정 | `env` | 재등록 + 세션 재시작 |
 | `BITBUCKET_ALLOWED_REPOS_FILE` 설정 | `file` | 파일 편집 + 세션 재시작 |
 | 기본 파일이 기동 시점에 존재 | `file` | 파일 편집 + 세션 재시작 |
-| `BITBUCKET_ALLOW_ALL_REPOS=true` | `open` | 제한 없음. 토큰 스코프에만 의존 |
+| `BITBUCKET_ALLOW_ALL_REPOS=true` | `open` | 제한 없음. **경로 가드까지 함께 풀린다** (아래) |
 | 아무것도 없음 | `denied` | **전부 차단** |
 
 env가 파일보다 우선한다. `bb_doctor` 응답의 `allowlist 소스`가 지금 어느 모드이고
 언제 읽는지 알려준다.
+
+**`open` 모드는 저장소 제한만 푸는 것이 아니다.** 경로 가드도 함께 풀려
+`/workspaces/*` · `/teams` · `/user/permissions/repositories` 같은 경로가 열린다
+(실측). allowlist 가 있을 때만 "`/repositories/{ws}/{repo}` 하위와 `/user` 만" 이라는
+제한이 걸린다. 즉 `open` 은 **토큰이 할 수 있는 전부**이며, 남는 방어선은 쓰기 게이트뿐이다.
 
 ### 언제 어떻게 만드나
 
@@ -738,7 +743,7 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 189개
+npm test    # 191개
 ```
 
 `test` 스크립트는 `node --test "test/**/*.test.mjs"` 다. **파일을 나열하지 않는다** —
@@ -747,7 +752,7 @@ Node 가 직접 확장하므로 셸에 의존하지 않고, 디렉터리 지정(
 Node 24 에서 모듈로 해석돼 실패한다.
 
 
-- `test/lib.test.mjs` (88) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
+- `test/lib.test.mjs` (90) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
   diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
 - `test/forbidden.test.mjs` (2) — 추적 파일에 사내 저장소 이름·실명·티켓 키가
@@ -967,6 +972,30 @@ stdout(토큰 채널)은 오류 메시지에 실리지 않는 것을 확인했�
 `filter-repo` + SHA 참조 일괄 갱신 + force push 를 한 묶음으로 한다.
 
 ### 발견해 고친 취약점
+
+**저장소 이름 검증이 URL 문자를 통과시켰다** (v0.19.0에서 수정)
+
+`parseRepo` 가 `/^([^/\s]+)\/([^/\s]+)$/` 였다. 공백만 막고 **`#`·`?`·`%`·`:` 는
+통과시켰는데**, 이들은 URL 과 allowlist 파일에서 의미를 갖는다.
+
+```
+parseRepo("ws/x#").full  →  "ws/x#"
+요청 URL  /repositories/ws/x#/pullrequests/1
+실제 경로  /2.0/repositories/ws/x        ← `#` 뒤가 프래그먼트로 밀린다
+```
+
+PR 을 요청했는데 **저장소 엔드포인트를 치고 그 사실이 드러나지 않는다.**
+`bb_allowlist_add("ws/allowed#c")` 는 파일에 그대로 쓰지만 파일 파서가 `#` 이후를
+주석으로 떼므로, **저장한 것과 적용되는 것이 달라진다.**
+
+경계 우회는 아니다 — allowlist 모드에서는 `#` 이 든 값이 목록과 절대 일치하지 않아
+거부된다. 영향은 `open` 모드의 요청 오지정과 allowlist 쓰기의 불일치다. 다만
+**원인이 경로 탈출 버그와 같다** — 검증한 값과 실제로 쓰이는 값이 다르다.
+
+수정은 양쪽을 실제 슬러그 문자 집합(`[A-Za-z0-9._-]`)으로 좁히는 것이다.
+`parseRepo` 와 `parseAllowlistFile` 이 **같은 집합**을 쓴다 — 한쪽만 느슨하면
+파일에는 들어가는데 툴에서는 거부되는 상태가 생긴다. 실제 allowlist 13개가 그대로
+통과하는 것을 확인했다(조이다가 정상 설정을 막으면 서버가 아예 안 뜬다).
 
 **진단·설정 도구의 출력 유출** (v0.7.1에서 수정)
 

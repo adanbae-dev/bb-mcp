@@ -165,6 +165,35 @@ test("parseRepo는 형식을 검증하고 allowlist를 대조한다", () => {
   assert.equal(parseRepo("any/thing", []).full, "any/thing");
 });
 
+test("parseRepo는 URL·파일에서 의미를 갖는 문자를 거부한다", () => {
+  // `#` 하나가 요청 경로를 자른다 —
+  //   full="ws/x#" → `/repositories/ws/x#/pullrequests/1` 의 실제 경로는
+  //   `/repositories/ws/x` 이고 나머지는 프래그먼트로 밀린다.
+  // allowlist 파일에서는 `#` 이후가 주석으로 떨어져, 저장한 것과 적용되는 것이
+  // 달라진다. 경로 가드의 "판정 대상과 전송 대상이 다르다" 와 같은 계열이다.
+  for (const bad of ["ws/x#", "ws/allowed#c", "ws/a?b", "ws/a%2e", "ws/a:b", "ws/a@b"]) {
+    assert.throws(() => parseRepo(bad, []), /형식/, `${bad} 는 거부돼야 한다`);
+  }
+
+  // 실제 슬러그에 쓰이는 문자는 그대로 통과해야 한다 — 조이다가 정상 설정을
+  // 막으면 서버가 아예 안 뜬다
+  for (const ok of ["acme/web-app", "acme/admin_fe", "acme/api.v2", "Acme/Web-App", "a/b"]) {
+    assert.equal(parseRepo(ok, []).full, ok, `${ok} 는 통과해야 한다`);
+  }
+});
+
+test("allowlist 파일 파서가 parseRepo 와 같은 문자 집합을 쓴다", () => {
+  // 한쪽만 느슨하면 파일에는 들어가는데 툴에서는 거부되는 상태가 생긴다
+  assert.deepEqual(parseAllowlistFile("acme/web-app\nacme/api.v2\n"), [
+    "acme/web-app",
+    "acme/api.v2",
+  ]);
+  assert.throws(() => parseAllowlistFile("acme/a:b\n"), /형식이 아닙니다/);
+  assert.throws(() => parseAllowlistFile("acme/a%2e\n"), /형식이 아닙니다/);
+  // `#` 는 주석이므로 그 앞까지만 남는다 — 이건 의도된 동작이다
+  assert.deepEqual(parseAllowlistFile("acme/web-app # 메모\n"), ["acme/web-app"]);
+});
+
 test("prId는 양의 정수만 통과시킨다", () => {
   assert.equal(prId(12), 12);
   assert.equal(prId("12"), 12);

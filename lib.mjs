@@ -100,7 +100,12 @@ export function parseRepo(repo, allowedRepos = []) {
   if (typeof repo !== "string") {
     throw new Error("repo는 'workspace/repo' 형식의 문자열이어야 합니다");
   }
-  const m = repo.trim().match(/^([^/\s]+)\/([^/\s]+)$/);
+  // 슬러그 문자만 받는다. `[^/\s]+` 는 `#`·`?`·`%`·`:` 를 통과시켰는데, 이들은
+  // URL 과 allowlist 파일에서 **의미를 갖는다** — `#` 하나로 요청 경로가 잘리고
+  // (`/repositories/ws/x#/pullrequests/1` → 실제 요청은 `/repositories/ws/x`),
+  // allowlist 파일에서는 `#` 이후가 주석으로 떨어져 저장한 것과 적용되는 것이
+  // 달라진다. 경로 가드에서 겪은 "판정 대상과 전송 대상이 다르다" 와 같은 계열이다.
+  const m = repo.trim().match(/^([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)$/);
   if (!m) throw new Error(`repo는 'workspace/repo' 형식이어야 합니다: ${repo}`);
   const full = `${m[1]}/${m[2]}`;
   if (allowedRepos.length && !allowedRepos.includes(full)) {
@@ -257,7 +262,9 @@ export function parseAllowlistFile(content, source = "allowlist 파일") {
   content.split(/\r?\n/).forEach((raw, i) => {
     const line = raw.replace(/#.*$/, "").trim();
     if (!line) return;
-    if (!/^[^/\s]+\/[^/\s]+$/.test(line)) {
+    // parseRepo 와 같은 문자 집합을 쓴다. 한쪽만 느슨하면 파일에는 들어가는데
+    // 툴에서는 거부되는(또는 그 반대) 상태가 생긴다.
+    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(line)) {
       throw new Error(
         `${source} ${i + 1}번째 줄이 'workspace/repo' 형식이 아닙니다: ${raw.trim()}`,
       );

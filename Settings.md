@@ -247,7 +247,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 189개 통과 확인
+npm test   # 191개 통과 확인
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).
@@ -486,7 +486,7 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | `/user`만 403 | `read:user` 미부여 | **정상.** PR 리뷰에 불필요 |
 | `허용되지 않은 저장소: X` | allowlist 밖 | 파일에 추가 (재시작 불필요) |
 | `비어 있어 모든 저장소를 차단` | 파일에 주석만 있음 | 실제 저장소 줄 추가 |
-| `N번째 줄이 'workspace/repo' 형식이 아닙니다` | 오타 (앞 슬래시 등) | 그 줄 수정 |
+| `N번째 줄이 'workspace/repo' 형식이 아닙니다` | 오타 (앞 슬래시 등), 또는 슬러그 밖 문자 (`:` `%` `?` `@` 등) | 그 줄 수정. 0.19.0 부터 `[A-Za-z0-9._-]` 만 받는다 — URL·주석에서 의미를 갖는 문자가 통과하면 저장한 것과 적용되는 것이 달라진다 |
 | `읽을 수 없어 모든 저장소를 차단` | 파일 경로 오타/삭제 | 경로 확인 |
 | `hex로 인코딩돼 보입니다` | 키체인 값에 개행 | §5대로 재저장 |
 | 툴이 20개보다 적게 보임 | 옛 버전이 떠 있음 | 세션 재시작 |
