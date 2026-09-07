@@ -415,6 +415,9 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 | `/bb-doctor` | 설정 진단 (`quick` 이면 네트워크 없이) |
 | `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
 
+다섯 명령 모두 **결과를 마크다운 표로** 낸다. 툴이 돌려주는 JSON을 그대로
+붙이지 않는다. 형식 규칙은 [README.md §3 "결과는 마크다운 표로 낸다"](./README.md).
+
 **저장소 루트에 `.mcp.json` 을 만들지 않는다.** 프로젝트 스코프 MCP 설정으로
 읽혀서 user 스코프 등록을 덮어쓰고, 서버가 `CONNECTION_CLOSED` 로 죽는다.
 
