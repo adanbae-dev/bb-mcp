@@ -554,10 +554,11 @@ stderr(= Claude Code의 MCP 로그)에 요청·상태·소요시간·재시도�
 
 ```
 bb_doctor()                             설정 점검 (처음 한 번, 그리고 막힐 때)
+bb_detect_repo()                        현재 폴더가 어느 저장소인가 (묻기 전에 먼저)
 bb_pr_inbox()                           어디에 뭐가 열려 있나 (allowlist 전체)
                                         — 슬래시로는 /bb-prs
 bb_pr_commits(repo, id)                 커밋 위생
-bb_pr_activity(repo, id)                승인 후 푸시가 있었나
+bb_pr_activity(repo, id)                승인·리뷰 후 푸시가 있었나
 bb_pr_get(repo, id)                     의도·범위 파악 → source_commit 확보
 bb_pr_files(repo, id)                   어디를 볼지 정하기
 bb_pr_diff(repo, id, path=...)          파일 단위로 변경분 읽기
@@ -566,8 +567,15 @@ bb_pr_comments(repo, id)                이미 지적된 것 확인 (중복 방�
 bb_comment(repo, id, body, path, line)  줄 단위로 코멘트
 ```
 
-저장소가 여럿이면 `bb_pr_inbox`가 출발점이다. 저장소별로 `bb_pr_list`를
-12번 부르는 대신 한 번에 모아 최근 갱신순으로 돌려준다.
+`bb_detect_repo`가 실제 출발점이다. 현재 폴더가 Bitbucket 클론이면 저장소를
+묻지 않고 그것을 쓴다 — 슬래시 명령의 기본 동작이 이것이다. 감지에 실패했을 때만
+`bb_pr_inbox`로 전체를 본다. 저장소별로 `bb_pr_list`를 여러 번 부르는 대신 한 번에
+모아 최근 갱신순으로 돌려준다.
+
+**위 목록은 리뷰 흐름에 쓰는 것만이다.** 전체 20개(PR 생성 `bb_pr_create`,
+파일 이력 `bb_file_history`, 브랜치 커밋 `bb_branch_commits`, allowlist 추가
+`bb_allowlist_add` 등)는 [README.md §3](./README.md)의 툴 표를 본다 — 여기에
+복제하면 두 곳이 갈린다.
 
 `bb_file`은 diff의 hunk만으로 판단이 안 설 때 쓴다. 줄 번호가 붙어 나오므로
 `bb_comment`의 `line`을 여기서 그대로 읽는다.
