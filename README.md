@@ -281,7 +281,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | 툴 | 하는 일 |
 |---|---|
 | `bb_detect_repo()` | **현재 폴더의 저장소 자동 감지** (git remote 기반) |
-| `bb_repos(workspace?)` | 리뷰 대상 저장소 목록 |
+| `bb_repos(workspace?)` | 리뷰 대상 저장소 목록. allowlist 가 있으면 **그 목록만** 조회한다 — 워크스페이스 전체 목록은 노출하지 않는다. `workspace` 는 allowlist 가 없을 때만 쓴다 |
 | `bb_pr_inbox(state?, per_repo?)` | **allowlist 전 저장소**의 PR을 최근 갱신순으로 |
 | `bb_pr_list(repo, state?, limit?)` | 한 저장소의 PR 목록. 기본 `OPEN`, 20개, 최근 갱신순 |
 | `bb_pr_get(repo, id)` | PR 상세 — 제목·설명·브랜치·커밋 해시·리뷰어·승인 |
