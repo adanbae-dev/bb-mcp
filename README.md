@@ -11,12 +11,14 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `lib.mjs` | 가드·파서·응답 축약 등 순수 로직 (테스트 대상) |
 | `test/lib.test.mjs` | 단위 테스트 |
 | `test/integration.test.mjs` | 가짜 Bitbucket API + 실제 MCP 클라이언트 |
+| `test/forbidden.test.mjs` | 사내 이름·실명·티켓 키가 새는지 검사 (해시 대조) |
 | `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·등록) |
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
 | `plugin/skills/bb-pr-create/` | PR 생성 스킬 (초안 작성 + 중복 검사) |
-| `plugin/commands/` | `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` |
+| `plugin/commands/` | `/bb-review`, `/bb-prs`, `/bb-pr-new`, `/bb-doctor`, `/bb-repos` |
+| [`CLAUDE.md`](./CLAUDE.md) | 이 저장소에서 반복해 대가를 치른 작업 규칙 7개 |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 변경 이력 |
 | `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
@@ -40,7 +42,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 
 ```bash
 npm i @modelcontextprotocol/sdk@1 zod@3
-npm test                                              # 144개
+npm test                                              # 186개
 
 # 토큰 (-w 뒤에 값을 직접. 대화형 프롬프트는 128자에서 잘린다)
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
@@ -284,7 +286,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_pr_get(repo, id)` | PR 상세 — 제목·설명·브랜치·커밋 해시·리뷰어·승인 |
 | `bb_pr_files(repo, id, path_prefix?)` | 변경 파일 + 추가/삭제 줄 수 (diffstat). `path_prefix` 로 좁혀도 `file_count`·총계는 전체 기준 |
 | `bb_pr_commits(repo, id, full?)` | PR을 이루는 커밋. **기본은 제목 줄만** |
-| `bb_pr_activity(repo, id)` | 승인·변경요청·업데이트 이력 |
+| `bb_pr_activity(repo, id)` | 승인·변경요청·업데이트 이력. `pushed_after_approval` 과 `pushed_after_review`(승인 없이 코멘트로만 리뷰하는 팀용). 판정은 소스 커밋 해시 변화 |
 | `bb_file_history(repo, ref, path, enrich?)` | 파일을 건드린 커밋 이력 |
 | `bb_branch_commits(repo, branch, exclude?)` | 브랜치가 대상보다 앞선 커밋 (PR 초안용) |
 | `bb_pr_diff(repo, id, path?, context?, max_bytes?)` | unified diff 원문 |
@@ -451,7 +453,7 @@ bb_pr_inbox()                           어디에 뭐가 열려 있나 (저장�
 bb_pr_get(repo, id)                     의도·범위 파악 → source/destination_commit
 bb_pr_files(repo, id)                   어디를 볼지 정하기
 bb_pr_commits(repo, id)                 커밋 위생 — 포맷과 기능이 섞였나
-bb_pr_activity(repo, id)                승인 후 푸시가 있었나 (승인이 유효한가)
+bb_pr_activity(repo, id)                승인·리뷰 후 푸시가 있었나 (그 판단이 아직 유효한가)
 bb_pr_diff(repo, id, path=...)          파일 단위로 변경분 읽기
 bb_file(repo, source_commit, path)      맥락이 필요하면 파일 전문 + 줄 번호
 bb_file(repo, destination_commit, ...)  이 PR의 회귀인지 base 대조
@@ -735,15 +737,25 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 176개
+npm test    # 186개
 ```
 
-- `test/lib.test.mjs` (82) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
+`test` 스크립트는 `node --test "test/**/*.test.mjs"` 다. **파일을 나열하지 않는다** —
+전에 3개를 하드코딩해서 새 테스트 파일이 조용히 실행되지 않았다(0.18.0). 따옴표 글롭은
+Node 가 직접 확장하므로 셸에 의존하지 않고, 디렉터리 지정(`node --test ./test`)은
+Node 24 에서 모듈로 해석돼 실패한다.
+
+
+- `test/lib.test.mjs` (88) — 경로 가드, **URL 정규화 판정(경로 탈출 회귀)**,
   필드 추출, 토큰 명령 파싱, 토큰 위생 검사, allowlist 파일 파서, 코멘트 페이로드,
   diff 잘라내기, 재시도 판정, 줄 번호, 동시성·크기 상한, **진단 로직·토큰 미노출**
+- `test/forbidden.test.mjs` (2) — 추적 파일에 사내 저장소 이름·실명·티켓 키가
+  있는지. **원문이 아니라 SHA-256 만 저장한다** — 평문 목록을 두면 그 파일이 곧
+  유출원이 되어 검사를 추가하려다 검사 대상을 만드는 셈이다. 걸리면 위치만 알린다
+  (CI 로그가 또 하나의 유출 경로다). 토큰 경계에서만 잡는 denylist 라는 한계가 있다
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
-- `test/integration.test.mjs` (90) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
+- `test/integration.test.mjs` (92) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   스냅샷/재읽기·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,
   **퍼센트 인코딩 경로 탈출 차단**, **토큰 유출 방어**, 동시성 상한,
