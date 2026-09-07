@@ -329,6 +329,19 @@ test("bb_pr_files는 next를 따라가 두 페이지를 합친다", async () => 
   });
 });
 
+test("bb_pr_files의 path_prefix 는 좁히지만 총계를 줄이지 않는다", async () => {
+  await withServer({}, async ({ callTool }) => {
+    const out = JSON.parse(
+      (await callTool("bb_pr_files", { repo: "acme/repo-a", id: 7, path_prefix: "src/a" })).text);
+    assert.deepEqual(out.files.map((f) => f.path), ["src/a.js"], "좁혀진다");
+    assert.equal(out.matched, 1);
+    // 좁혔다고 범위를 오해하게 만들면 안 된다 — 전체 기준 값은 그대로다
+    assert.equal(out.file_count, 2, "file_count 는 전체다");
+    assert.equal(out.total_lines_added, 15, "총계도 전체다");
+    assert.equal(out.path_prefix, "src/a");
+  });
+});
+
 test("bb_pr_diff는 max_bytes에서 잘리고 path로 좁힐 수 있다", async () => {
   await withServer({}, async ({ callTool }) => {
     const big = await callTool("bb_pr_diff", { repo: "acme/repo-a", id: 7, max_bytes: 2000 });

@@ -98,7 +98,10 @@ const DEBUG = process.env.BITBUCKET_DEBUG === "true";
 // bb_pr_inbox 가 저장소 수만큼 동시에 때리지 않게 한다
 const CONCURRENCY = toPositiveInt(process.env.BITBUCKET_CONCURRENCY, 6);
 // 목록 응답이 컨텍스트를 통째로 태우지 않게 하는 상한
-const LIST_MAX_BYTES = toPositiveInt(process.env.BITBUCKET_LIST_MAX_BYTES, 120_000);
+// 120_000 은 MCP 툴 응답 한도를 넘긴다 — 280 파일 PR 의 bb_pr_files 가
+// 71,766자로 상한을 통과한 뒤 클라이언트에서 잘렸다(실측). 상한이 있어도
+// 값이 한도보다 크면 없는 것과 같다.
+const LIST_MAX_BYTES = toPositiveInt(process.env.BITBUCKET_LIST_MAX_BYTES, 40_000);
 
 // 토큰은 절대 찍지 않는다. 메서드·경로·상태·소요시간만.
 function debug(...parts) {
@@ -663,22 +666,35 @@ server.registerTool(
     title: "PR 변경 파일 목록",
     description:
       "PR이 건드린 파일과 추가/삭제 줄 수(diffstat). diff 전체를 받기 전에 " +
-      "리뷰 범위를 잡고 큰 파일을 골라내는 데 쓴다. 인라인 코멘트의 path도 여기서 얻는다.",
+      "리뷰 범위를 잡고 큰 파일을 골라내는 데 쓴다. 인라인 코멘트의 path도 여기서 얻는다. " +
+      "파일이 많아 dropped 가 붙으면 path_prefix 로 좁힌다 — file_count 와 총계는 " +
+      "항상 전체 기준이므로 좁혀도 범위를 오해하지 않는다.",
     inputSchema: {
       repo: z.string().describe("workspace/repo"),
       id: z.number().int().positive().describe("PR 번호"),
+      path_prefix: z
+        .string()
+        .optional()
+        .describe("이 경로로 시작하는 파일만. 예: apps/crm/"),
     },
   },
-  guard(async ({ repo, id }, api) => {
+  guard(async ({ repo, id, path_prefix }, api) => {
     const { values, truncated } = await api.getAll(
       `${api.prBase(repo)}/${prId(id)}/diffstat?pagelen=100`,
     );
     const all = values.map(compactDiffstat);
-    const { items: files, dropped } = capItems(all, LIST_MAX_BYTES);
+    // 좁히기는 상한에 걸리기 전에 한다. 상한이 먼저 자르면 원하는 파일이
+    // 잘려나간 뒤에 필터가 도는 셈이 된다.
+    const scoped = path_prefix
+      ? all.filter((f) => String(f.path ?? "").startsWith(path_prefix))
+      : all;
+    const { items: files, dropped } = capItems(scoped, LIST_MAX_BYTES);
     return okJson({
       repo: api.repoOf(repo).full,
       pr: prId(id),
+      // 전체 기준이다. path_prefix 로 좁혀도 이 값은 줄지 않는다.
       file_count: all.length,
+      ...(path_prefix ? { path_prefix, matched: scoped.length } : {}),
       dropped: dropped || undefined,
       truncated,
       total_lines_added: all.reduce((a, f) => a + f.lines_added, 0),
@@ -1016,8 +1032,11 @@ server.registerTool(
     description:
       "승인·변경요청·업데이트·코멘트가 언제 누구에 의해 있었는지. " +
       "bb_pr_get 은 현재 승인 상태만 보여주므로 경위를 알 수 없다. " +
-      "특히 '승인 후에 또 푸시됐는지'(pushed_after_approval)를 판정한다 — " +
-      "그렇다면 그 승인은 옛 코드에 대한 것이다.",
+      "'승인 후에 또 푸시됐는지'(pushed_after_approval)와 " +
+      "'마지막 리뷰 코멘트 후에 푸시됐는지'(pushed_after_review)를 판정한다 — " +
+      "그렇다면 그 승인·리뷰는 옛 코드에 대한 것이다. 승인 없이 코멘트로만 " +
+      "리뷰하는 팀에서는 뒤쪽이 유일한 신호다. 판정은 소스 커밋 해시 변화로 하며 " +
+      "제목·설명만 고친 업데이트는 푸시로 세지 않는다.",
     inputSchema: {
       repo: z.string().describe("workspace/repo"),
       id: z.number().int().positive().describe("PR 번호"),

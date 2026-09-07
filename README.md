@@ -240,7 +240,7 @@ MCP 설정으로 읽히고, 프로젝트 스코프는 user 스코프를 덮어�
 | `BITBUCKET_RETRY_MAX` | × | 429·5xx 재시도 횟수. 기본 2. `0`이면 재시도 안 함 |
 | `BITBUCKET_DEBUG` | × | `true`면 요청·상태·소요시간·재시도를 stderr에 남긴다 |
 | `BITBUCKET_CONCURRENCY` | × | `bb_pr_inbox` 동시 요청 수. 기본 6 |
-| `BITBUCKET_LIST_MAX_BYTES` | × | 목록 응답 크기 상한. 기본 120000 |
+| `BITBUCKET_LIST_MAX_BYTES` | × | 목록 응답 크기 상한. 기본 40000 — MCP 툴 응답 한도 안에 들어가야 한다 |
 | `BITBUCKET_API_BASE` | × | API 베이스 주입. **테스트 전용** — §7 참고 |
 
 **`ALLOW_COMMENT` 와 `ALLOW_WRITE` 는 별개다.** 리뷰 코멘트만 달 거면
@@ -282,7 +282,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_pr_inbox(state?, per_repo?)` | **allowlist 전 저장소**의 PR을 최근 갱신순으로 |
 | `bb_pr_list(repo, state?, limit?)` | 한 저장소의 PR 목록. 기본 `OPEN`, 20개, 최근 갱신순 |
 | `bb_pr_get(repo, id)` | PR 상세 — 제목·설명·브랜치·커밋 해시·리뷰어·승인 |
-| `bb_pr_files(repo, id)` | 변경 파일 + 추가/삭제 줄 수 (diffstat) |
+| `bb_pr_files(repo, id, path_prefix?)` | 변경 파일 + 추가/삭제 줄 수 (diffstat). `path_prefix` 로 좁혀도 `file_count`·총계는 전체 기준 |
 | `bb_pr_commits(repo, id, full?)` | PR을 이루는 커밋. **기본은 제목 줄만** |
 | `bb_pr_activity(repo, id)` | 승인·변경요청·업데이트 이력 |
 | `bb_file_history(repo, ref, path, enrich?)` | 파일을 건드린 커밋 이력 |

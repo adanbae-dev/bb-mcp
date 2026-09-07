@@ -716,6 +716,55 @@ test("summarizeActivity 는 승인 후 푸시를 잡아낸다", () => {
     summarizeActivity([{ kind: "changes_requested", user: "박" }]).changes_requested_by, ["박"]);
 });
 
+test("compactActivity 는 update 의 소스 커밋을 남긴다", () => {
+  const ev = compactActivity({
+    update: { author: { display_name: "김" }, state: "OPEN",
+              source: { branch: { name: "f" }, commit: { hash: "ccc333ddd444" } } },
+  });
+  assert.equal(ev.source_commit, "ccc333ddd444", "푸시 판정의 근거다");
+  // 없을 수도 있다. 그때 null 이어야 폴백 경로가 동작한다
+  assert.equal(compactActivity({ update: { state: "OPEN" } }).source_commit, null);
+});
+
+test("summarizeActivity 는 제목만 고친 업데이트를 푸시로 세지 않는다", () => {
+  // 같은 커밋이면 코드가 안 바뀐 것이다 — 승인은 여전히 유효하다
+  const titleEdit = summarizeActivity([
+    { kind: "update", date: "2026-09-01T00:00:00Z", source_commit: "aaa" },
+    { kind: "approval", user: "이", date: "2026-09-02T00:00:00Z" },
+    { kind: "update", date: "2026-09-03T00:00:00Z", source_commit: "aaa" },
+  ]);
+  assert.equal(titleEdit.pushed_after_approval, false, "커밋이 그대로다");
+
+  const realPush = summarizeActivity([
+    { kind: "update", date: "2026-09-01T00:00:00Z", source_commit: "aaa" },
+    { kind: "approval", user: "이", date: "2026-09-02T00:00:00Z" },
+    { kind: "update", date: "2026-09-03T00:00:00Z", source_commit: "bbb" },
+  ]);
+  assert.equal(realPush.pushed_after_approval, true, "커밋이 바뀌었다");
+});
+
+test("summarizeActivity 는 승인 없이 코멘트만 있어도 이후 푸시를 잡는다", () => {
+  // 실제로 이렇게 머지된 PR 이 있었다 — 승인 0건, 리뷰 코멘트만 2건.
+  // pushed_after_approval 만 보면 null 이라 아무 신호가 없다.
+  const stale = summarizeActivity([
+    { kind: "update", date: "2026-09-07T01:00:00Z", source_commit: "aaa111bbb222" },
+    { kind: "comment", user: "이", date: "2026-09-07T01:38:00Z" },
+    { kind: "update", date: "2026-09-07T01:59:00Z", source_commit: "ccc333ddd444" },
+  ]);
+  assert.equal(stale.pushed_after_approval, null, "승인이 없으므로 판정 불가");
+  assert.equal(stale.pushed_after_review, true, "리뷰는 옛 코드에 대한 것이 됐다");
+  assert.equal(stale.comment_count, 1);
+
+  const fresh = summarizeActivity([
+    { kind: "update", date: "2026-09-07T01:00:00Z", source_commit: "aaa" },
+    { kind: "comment", user: "이", date: "2026-09-07T01:38:00Z" },
+  ]);
+  assert.equal(fresh.pushed_after_review, false);
+
+  // 코멘트가 없으면 판정하지 않는다
+  assert.equal(summarizeActivity([{ kind: "update", date: "d" }]).pushed_after_review, null);
+});
+
 test("compactFileHistoryEntry 는 해시·경로·크기만 남긴다", () => {
   assert.deepEqual(
     compactFileHistoryEntry({ commit: { hash: "0123456789abcdef", links: {} }, path: "a/b.ts", size: 100 }),

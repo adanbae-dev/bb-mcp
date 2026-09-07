@@ -584,6 +584,10 @@ export function compactActivity(a) {
       date: a.update.date ?? null,
       state: a.update.state ?? null,
       title: a.update.title ?? null,
+      // 푸시 판정의 근거. update 이벤트는 제목·설명만 고친 것도 포함하므로
+      // 이벤트 존재만으로는 "푸시됐다"를 말할 수 없다. (실측: activity 응답의
+      // update 에 source.commit.hash 가 온다)
+      source_commit: at(a.update, "source.commit.hash") ?? null,
     };
   }
   if (a?.comment) {
@@ -602,16 +606,37 @@ export function summarizeActivity(events) {
   const approvals = events.filter((e) => e.kind === "approval");
   const changes = events.filter((e) => e.kind === "changes_requested");
   const updates = events.filter((e) => e.kind === "update");
+  const comments = events.filter((e) => e.kind === "comment");
   const latest = (xs) => xs.map((x) => x.date).filter(Boolean).sort().at(-1) ?? null;
-  const lastApproval = latest(approvals);
-  const lastUpdate = latest(updates);
+
+  const dated = updates.filter((u) => u.date).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const withCommit = dated.filter((u) => u.source_commit);
+
+  // ref 시각 이후에 소스 커밋이 실제로 바뀌었는지 본다.
+  // 커밋을 알 수 있으면 그것으로 판정한다 — 제목만 고친 update 를 푸시로 세면
+  // "리뷰가 무효" 라고 잘못 말하게 된다. 커밋 정보가 없으면(축약본·옛 응답)
+  // update 존재로 보수적으로 판정한다 — 놓치는 쪽보다 과다 검출이 안전하다.
+  const pushedAfter = (ref) => {
+    if (!ref) return null;
+    if (!dated.some((u) => u.date > ref)) return false;
+    if (withCommit.length) {
+      const atRef = withCommit.filter((u) => u.date <= ref).at(-1)?.source_commit ?? null;
+      if (atRef) return withCommit.at(-1).source_commit !== atRef;
+    }
+    return true;
+  };
+
   return {
     approvals: approvals.map((a) => a.user).filter(Boolean),
     changes_requested_by: changes.map((c) => c.user).filter(Boolean),
     update_count: updates.length,
-    // 승인 뒤에 업데이트가 있었다면 그 승인은 옛 코드에 대한 것이다
-    pushed_after_approval:
-      lastApproval && lastUpdate ? lastUpdate > lastApproval : null,
+    comment_count: comments.length,
+    // 승인 뒤에 푸시가 있었다면 그 승인은 옛 코드에 대한 것이다
+    pushed_after_approval: pushedAfter(latest(approvals)),
+    // 승인 없이 코멘트만으로 리뷰가 끝나는 경우가 실제로 있다. 그때
+    // pushed_after_approval 은 null 이라 아무 신호도 주지 못한다 —
+    // 마지막 리뷰 코멘트 뒤의 푸시를 따로 본다.
+    pushed_after_review: pushedAfter(latest(comments)),
   };
 }
 
