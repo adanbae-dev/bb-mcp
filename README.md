@@ -12,6 +12,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `test/lib.test.mjs` | 단위 테스트 |
 | `test/integration.test.mjs` | 가짜 Bitbucket API + 실제 MCP 클라이언트 |
 | `test/forbidden.test.mjs` | 사내 이름·실명·티켓 키가 새는지 검사 (해시 대조) |
+| `test/docs.test.mjs` | 툴 시그니처·개수가 README 와 갈렸는지 검사 |
 | `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·등록) |
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
@@ -42,7 +43,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 
 ```bash
 npm i @modelcontextprotocol/sdk@1 zod@3
-npm test                                              # 186개
+npm test                                              # 189개
 
 # 토큰 (-w 뒤에 값을 직접. 대화형 프롬프트는 128자에서 잘린다)
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'
@@ -285,13 +286,13 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_pr_list(repo, state?, limit?)` | 한 저장소의 PR 목록. 기본 `OPEN`, 20개, 최근 갱신순 |
 | `bb_pr_get(repo, id)` | PR 상세 — 제목·설명·브랜치·커밋 해시·리뷰어·승인 |
 | `bb_pr_files(repo, id, path_prefix?)` | 변경 파일 + 추가/삭제 줄 수 (diffstat). `path_prefix` 로 좁혀도 `file_count`·총계는 전체 기준 |
-| `bb_pr_commits(repo, id, full?)` | PR을 이루는 커밋. **기본은 제목 줄만** |
-| `bb_pr_activity(repo, id)` | 승인·변경요청·업데이트 이력. `pushed_after_approval` 과 `pushed_after_review`(승인 없이 코멘트로만 리뷰하는 팀용). 판정은 소스 커밋 해시 변화 |
-| `bb_file_history(repo, ref, path, enrich?)` | 파일을 건드린 커밋 이력 |
-| `bb_branch_commits(repo, branch, exclude?)` | 브랜치가 대상보다 앞선 커밋 (PR 초안용) |
+| `bb_pr_commits(repo, id, full?, limit?)` | PR을 이루는 커밋. **기본은 제목 줄만** |
+| `bb_pr_activity(repo, id, limit?)` | 승인·변경요청·업데이트 이력. `pushed_after_approval` 과 `pushed_after_review`(승인 없이 코멘트로만 리뷰하는 팀용). 판정은 소스 커밋 해시 변화 |
+| `bb_file_history(repo, ref, path, limit?, enrich?)` | 파일을 건드린 커밋 이력 |
+| `bb_branch_commits(repo, branch, exclude?, full?, limit?)` | 브랜치가 대상보다 앞선 커밋 (PR 초안용) |
 | `bb_pr_diff(repo, id, path?, context?, max_bytes?)` | unified diff 원문 |
 | `bb_pr_comments(repo, id, inline_only?)` | 이미 달린 코멘트 |
-| `bb_file(repo, ref, path, start?, end?)` | 커밋·브랜치의 파일 전문, **줄 번호 포함** |
+| `bb_file(repo, ref, path, start?, end?, max_bytes?)` | 커밋·브랜치의 파일 전문, **줄 번호 포함** |
 | `bb_get(path, fields?)` | 위로 안 되는 경로용 범용 GET. `fields` 는 목록 응답에서 `values[]` 각 원소 기준(`update.date`). 아무 값도 못 뽑으면 오류 |
 | `bb_doctor(probe?)` | **설정 진단** — 토큰·인증·스코프·allowlist·게이트 |
 | `bb_allowlist_list()` | 적용 중인 허용 저장소 + 파일과의 차이 |
@@ -325,7 +326,7 @@ PR 리뷰 중이라면 `ref`에 `bb_pr_get`의 `source_commit`을 넣는다.
 | 툴 | 게이트 | 하는 일 |
 |---|---|---|
 | `bb_comment(repo, id, body, path?, line?, side?, parent_id?)` | `ALLOW_COMMENT` | PR 코멘트 |
-| `bb_pr_create(repo, title, source_branch, ...)` | `ALLOW_PR_CREATE` | PR 생성. 중복이면 안 만든다 |
+| `bb_pr_create(repo, title, source_branch, destination_branch?, description?, reviewers?, close_source_branch?)` | `ALLOW_PR_CREATE` | PR 생성. 중복이면 안 만든다. `reviewers` 는 **UUID 배열**(display name 불가) — 저장소 설정의 default reviewers 나 과거 PR 의 `participants.user.uuid` 에서 얻는다 |
 | `bb_allowlist_add(repo)` | `ALLOW_ALLOWLIST_WRITE` | 허용 저장소 파일에 한 줄 추가 |
 | `bb_write(method, path, body?)` | `ALLOW_WRITE` | 범용 POST/PUT/DELETE |
 
@@ -737,7 +738,7 @@ allowlist가 있으면(`env` 또는 `file` 모드) 경로 판정은 **default-de
 ## 6. 동작 확인
 
 ```bash
-npm test    # 186개
+npm test    # 189개
 ```
 
 `test` 스크립트는 `node --test "test/**/*.test.mjs"` 다. **파일을 나열하지 않는다** —
@@ -753,6 +754,10 @@ Node 24 에서 모듈로 해석돼 실패한다.
   있는지. **원문이 아니라 SHA-256 만 저장한다** — 평문 목록을 두면 그 파일이 곧
   유출원이 되어 검사를 추가하려다 검사 대상을 만드는 셈이다. 걸리면 위치만 알린다
   (CI 로그가 또 하나의 유출 경로다). 토큰 경계에서만 잡는 denylist 라는 한계가 있다
+- `test/docs.test.mjs` (3) — 코드의 툴 이름·파라미터·개수가 이 README 와 갈렸는지.
+  문서 드리프트는 **틀려도 아무 데서도 안 터지는** 종류라 세 릴리스 연속으로
+  "확인했다" 뒤에 누락이 더 나왔다. 이름과 파라미터 **존재**만 본다 —
+  설명 문장의 정확성은 기계로 볼 수 없다
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
 - `test/integration.test.mjs` (92) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
