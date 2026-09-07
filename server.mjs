@@ -1392,7 +1392,13 @@ server.registerTool(
       fields: z
         .array(z.string())
         .optional()
-        .describe("추출할 키. 점 표기 지원. 예: ['id','title','author.display_name']"),
+        .describe(
+          "추출할 키. 점 표기 지원. 예: ['id','title','author.display_name']. " +
+          "목록 응답(values[])에서는 경로가 각 원소 기준이다 — 'update.date' 처럼 쓴다. " +
+          "'values.' 접두사를 붙여도 벗겨서 처리한다. 아무 값도 못 뽑으면 조용히 " +
+          "빈 객체를 주지 않고 오류를 낸다. 큰 목록은 URL 에 Bitbucket 네이티브 " +
+          "?fields= 를 붙이는 편이 낫다 — 서버가 처리해 전송량까지 줄어든다.",
+        ),
     },
   },
   guard(async ({ path: reqPath, fields }, api) =>

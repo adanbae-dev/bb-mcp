@@ -51,13 +51,45 @@ export function pick({ text, contentType = "" }, fields) {
     return text;
   }
 
+  const isList = Array.isArray(data?.values);
+
+  // 목록 응답에서 take 는 values 의 각 원소를 받으므로 경로도 원소 기준이다.
+  // 그런데 응답을 눈으로 보고 `values.update.date` 라고 쓰는 것이 자연스러워서,
+  // 그 형태가 조용히 아무것도 못 뽑는 일이 실제로 있었다. 접두사를 벗겨 둘 다 받고,
+  // 출력 키도 벗긴 쪽으로 통일한다 — 두 형태가 같은 결과를 내야 한다.
+  const paths = fields.map((f) =>
+    isList && f.startsWith("values.") ? f.slice("values.".length) : f,
+  );
+
+  let resolved = 0;
   const take = (obj) =>
     Object.fromEntries(
-      fields.map((f) => [f, f.split(".").reduce((o, k) => o?.[k], obj)]),
+      paths.map((path) => {
+        const v = path.split(".").reduce((o, k) => o?.[k], obj);
+        // null 은 실제 값이다. undefined 만 '못 찾음' 으로 센다.
+        if (v !== undefined) resolved += 1;
+        return [path, v];
+      }),
     );
-  const out = Array.isArray(data?.values)
+
+  const out = isList
     ? { values: data.values.map(take), next: data.next ?? null }
     : take(data);
+
+  // 아무 필드도 어디서도 안 잡혔으면 조용히 {} 를 돌려주지 않는다.
+  // 경로 오타와 '값이 비어 있음' 이 구분되지 않아 호출자가 원문을 다시 받게 된다
+  // (실제로 그렇게 되어 거대한 응답을 통째로 받은 일이 있다).
+  // 원소가 0개인 목록은 뽑을 대상 자체가 없으므로 오류가 아니다.
+  if (resolved === 0 && !(isList && data.values.length === 0)) {
+    throw new Error(
+      `fields 로 아무 값도 뽑지 못했습니다: ${fields.join(", ")}\n` +
+        (isList
+          ? "목록 응답의 경로는 values[] 의 각 원소 기준입니다 (예: update.date). "
+          : "") +
+        "경로를 확인하거나, fields 를 빼고 원문을 받거나, URL 에 Bitbucket 네이티브 " +
+        "?fields= 를 붙이세요 — 서버가 배열까지 처리하고 응답 자체가 작아집니다.",
+    );
+  }
   return JSON.stringify(out, null, 2);
 }
 

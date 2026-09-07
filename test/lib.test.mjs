@@ -74,6 +74,59 @@ test("pick은 fields가 없으면 원문 그대로다", () => {
   assert.equal(pick({ contentType: "application/json", text: "{}" }), "{}");
 });
 
+const jsonRes = (obj) => ({
+  contentType: "application/json",
+  text: JSON.stringify(obj),
+});
+
+test("pick은 목록에서 values. 접두사를 벗겨 처리한다", () => {
+  // 응답을 눈으로 보고 values.update.date 라고 쓰는 것이 자연스럽다.
+  // 예전에는 이 형태가 조용히 {} 를 돌려줬다.
+  const res = jsonRes({ values: [{ update: { date: "d1" } }], next: null });
+  const out = JSON.parse(pick(res, ["values.update.date"]));
+  assert.deepEqual(out.values, [{ "update.date": "d1" }], "키도 벗긴 쪽으로 통일된다");
+
+  // 두 형태가 같은 결과를 내야 한다
+  assert.deepEqual(JSON.parse(pick(res, ["update.date"])).values, out.values);
+});
+
+test("pick은 원소마다 필드가 달라도 오류를 내지 않는다", () => {
+  // activity 는 update / comment / approval 이 섞여 온다.
+  // 특정 원소에 그 필드가 없는 것은 정상이다 — 하나라도 잡히면 된다.
+  const res = jsonRes({
+    values: [{ update: { date: "d1" } }, { comment: { id: 9 } }],
+    next: null,
+  });
+  const out = JSON.parse(pick(res, ["update.date", "comment.id"]));
+  assert.deepEqual(out.values, [{ "update.date": "d1" }, { "comment.id": 9 }]);
+});
+
+test("pick은 아무 값도 못 뽑으면 조용히 넘어가지 않는다", () => {
+  // 경로 오타와 '값이 비어 있음' 이 구분되지 않으면 호출자가 원문을 다시 받는다.
+  assert.throws(
+    () => pick(jsonRes({ values: [{ update: { date: "d1" } }], next: null }), ["values.nope"]),
+    /아무 값도 뽑지 못했습니다[\s\S]*각 원소 기준/,
+    "목록이면 원소 기준이라는 힌트를 준다",
+  );
+  assert.throws(
+    () => pick(jsonRes({ id: 7 }), ["nope.deeper"]),
+    /아무 값도 뽑지 못했습니다/,
+    "단일 객체도 같다",
+  );
+});
+
+test("pick은 빈 목록과 null 값을 오류로 보지 않는다", () => {
+  // 뽑을 원소가 없는 것은 정상이다
+  assert.deepEqual(
+    JSON.parse(pick(jsonRes({ values: [], next: null }), ["update.date"])),
+    { values: [], next: null },
+  );
+  // null 은 실제 값이다. undefined 만 '못 찾음' 이다
+  assert.deepEqual(JSON.parse(pick(jsonRes({ merge_commit: null }), ["merge_commit"])), {
+    merge_commit: null,
+  });
+});
+
 test("tokenizeCmd는 따옴표로 묶인 인자를 보존한다", () => {
   assert.deepEqual(tokenizeCmd("security find-generic-password -s bb-api-token -w"), [
     "security", "find-generic-password", "-s", "bb-api-token", "-w",

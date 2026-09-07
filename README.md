@@ -290,7 +290,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 | `bb_pr_diff(repo, id, path?, context?, max_bytes?)` | unified diff 원문 |
 | `bb_pr_comments(repo, id, inline_only?)` | 이미 달린 코멘트 |
 | `bb_file(repo, ref, path, start?, end?)` | 커밋·브랜치의 파일 전문, **줄 번호 포함** |
-| `bb_get(path, fields?)` | 위로 안 되는 경로용 범용 GET |
+| `bb_get(path, fields?)` | 위로 안 되는 경로용 범용 GET. `fields` 는 목록 응답에서 `values[]` 각 원소 기준(`update.date`). 아무 값도 못 뽑으면 오류 |
 | `bb_doctor(probe?)` | **설정 진단** — 토큰·인증·스코프·allowlist·게이트 |
 | `bb_allowlist_list()` | 적용 중인 허용 저장소 + 파일과의 차이 |
 
