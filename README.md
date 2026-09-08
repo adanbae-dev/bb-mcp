@@ -13,7 +13,7 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 | `test/integration.test.mjs` | 가짜 Bitbucket API + 실제 MCP 클라이언트 |
 | `test/forbidden.test.mjs` | 사내 이름·실명·티켓 키가 새는지 검사 (해시 대조) |
 | `test/docs.test.mjs` | 툴 시그니처·개수가 README 와 갈렸는지 검사 |
-| `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·등록) |
+| `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·서버 등록·플러그인 설치) |
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
@@ -136,7 +136,9 @@ claude plugin update bb-pr-review@bb-mcp
 | MCP 서버 | 툴 20개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
 | 스킬·명령 | `/bb-pr-review`, `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` | 플러그인 캐시 **또는** `~/.claude/skills/` |
 
-가장 짧은 길은 `setup.sh` 하나다. 서버 등록과 스킬 설치를 6단계로 다 한다.
+가장 짧은 길은 `setup.sh` 하나다. 서버 등록과 플러그인 설치를 6단계로 다 하므로
+**재시작은 한 번이면 된다.** 6단계에서 `claude plugin` 설치와 직접 복사 중 고를 수 있고,
+직접 복사를 고르면 스킬 2개와 명령 5개를 **전부** 옮긴다(개수를 보고한다).
 
 ```bash
 git clone https://github.com/adanbae-dev/bb-mcp && cd bb-mcp
@@ -194,7 +196,8 @@ cp plugin/skills/bb-pr-review/*.md ~/.claude/skills/bb-pr-review/
 cp plugin/commands/bb-review.md ~/.claude/commands/
 ```
 
-`setup.sh` 6단계가 이걸 대신한다.
+`setup.sh` 6단계가 이걸 대신한다 — 스킬·명령 목록을 디스크에서 만들므로 항목이
+늘어도 따라온다.
 
 스킬의 `trigger:` 프론트매터가 슬래시 명령을 만든다. **`~/.claude/skills/` 에
 있어야 로드되고, 저장소의 `plugin/skills/` 는 설치 없이는 탐색되지 않는다.**

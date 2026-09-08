@@ -403,7 +403,8 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 플러그인을 고쳤다면 버전을 세 곳에 맞춰야 한다
 ([README.md §1-1](./README.md) "버전 올리는 순서").
 
-`setup.sh` 6단계가 대신한다. 자세한 것은 [README.md §1-1](./README.md).
+`setup.sh` 6단계가 대신한다 — `claude plugin` 설치와 직접 복사 중 고르고, 직접 복사면
+스킬 2개·명령 5개를 전부 옮긴다. 자세한 것은 [README.md §1-1](./README.md).
 
 세션 재시작 후 세 개가 뜬다.
 

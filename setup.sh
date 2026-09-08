@@ -182,16 +182,24 @@ fi
 # ── 6. 스킬 ──────────────────────────────────────────────────────────
 # 스킬은 두 경로 중 하나로만 설치한다. 둘 다 하면 같은 이름이 두 벌 생긴다.
 #   (a) claude plugin  — ~/.claude/plugins/cache/... 에 놓인다. 갱신·제거가 쉽다
-#   (b) 직접 복사       — ~/.claude/skills/ 에 놓인다. claude CLI 가 없어도 된다
-say "6/6  리뷰 스킬"
-SKILL_SRC="$DIR/plugin/skills/bb-pr-review"
-SKILL_DST="$HOME/.claude/skills/bb-pr-review"
-CMD_SRC="$DIR/plugin/commands/bb-review.md"
-CMD_DST="$HOME/.claude/commands/bb-review.md"
+#   (b) 직접 복사       — ~/.claude/skills/ 와 ~/.claude/commands/ 에 놓인다.
+#                        claude CLI 가 없어도 된다
+say "6/6  스킬·슬래시 명령"
+# 개별 파일을 나열하지 않는다. 전에 스킬 1개·명령 1개만 복사하면서 성공으로
+# 보고했고(실제로는 스킬 2개·명령 5개) 새로 추가한 것이 조용히 빠졌다.
+# 목록은 디스크에서 만든다 — 그러면 늘어나도 저절로 따라온다.
+SKILL_DIR="$DIR/plugin/skills"
+CMD_DIR="$DIR/plugin/commands"
+SKILL_HOME="$HOME/.claude/skills"
+CMD_HOME="$HOME/.claude/commands"
 
-if [ ! -d "$SKILL_SRC" ]; then
-  die "$SKILL_SRC 를 찾을 수 없습니다. 저장소가 온전한지 확인하세요"
+if [ ! -d "$SKILL_DIR" ]; then
+  die "$SKILL_DIR 를 찾을 수 없습니다. 저장소가 온전한지 확인하세요"
 fi
+
+N_SKILL=$(find "$SKILL_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+N_CMD=$(find "$CMD_DIR" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+echo "  스킬 ${N_SKILL}개 · 명령 ${N_CMD}개"
 
 # 플러그인으로 이미 깔려 있으면 복사하지 않는다 — 중복 방지
 PLUGIN_INSTALLED=0
@@ -205,7 +213,7 @@ if [ "$PLUGIN_INSTALLED" = 1 ]; then
 elif command -v claude >/dev/null; then
   echo "  설치 방법을 고르세요."
   echo "    1) claude plugin  (권장 — 갱신·제거가 쉽다)"
-  echo "    2) 직접 복사       ($SKILL_DST)"
+  echo "    2) 직접 복사       ($SKILL_HOME/ · $CMD_HOME/)"
   echo "    3) 건너뛰기"
   CH=""; read -rp "  [1/2/3] " CH || true
   case "${CH:-1}" in
@@ -228,20 +236,47 @@ else
 fi
 
 if [ "${COPY_SKILL:-0}" = 1 ]; then
-  if [ -e "$SKILL_DST" ]; then
-    R=""; read -rp "  $SKILL_DST 가 이미 있습니다. 덮어쓸까요? [y/N] " R || true
-    [ "${R:-N}" = "y" ] && { cp -R "$SKILL_SRC/." "$SKILL_DST/" && ok "갱신"; } || ok "기존 유지"
-  else
-    mkdir -p "$SKILL_DST"
-    cp -R "$SKILL_SRC/." "$SKILL_DST/" && ok "$SKILL_DST"
+  # 덮어쓸지는 한 번만 묻는다. 항목마다 물으면 일곱 번 묻게 된다.
+  EXISTING=0
+  for src in "$SKILL_DIR"/*/; do
+    [ -d "$src" ] && [ -e "$SKILL_HOME/$(basename "$src")" ] && EXISTING=1
+  done
+  for src in "$CMD_DIR"/*.md; do
+    [ -f "$src" ] && [ -e "$CMD_HOME/$(basename "$src")" ] && EXISTING=1
+  done
+
+  DO_COPY=1
+  if [ "$EXISTING" = 1 ]; then
+    R=""; read -rp "  이미 설치된 것이 있습니다. 덮어쓸까요? [y/N] " R || true
+    [ "${R:-N}" = "y" ] || { DO_COPY=0; ok "기존 유지"; }
   fi
-  if [ -f "$CMD_SRC" ]; then
-    mkdir -p "$(dirname "$CMD_DST")"
-    cp "$CMD_SRC" "$CMD_DST" && ok "/bb-review 명령"
+
+  if [ "$DO_COPY" = 1 ]; then
+    C_SKILL=0; C_CMD=0
+    mkdir -p "$SKILL_HOME" "$CMD_HOME"
+    for src in "$SKILL_DIR"/*/; do
+      [ -d "$src" ] || continue
+      name="$(basename "$src")"
+      mkdir -p "$SKILL_HOME/$name"
+      cp -R "$src." "$SKILL_HOME/$name/" && C_SKILL=$((C_SKILL + 1))
+    done
+    for src in "$CMD_DIR"/*.md; do
+      [ -f "$src" ] || continue
+      cp "$src" "$CMD_HOME/" && C_CMD=$((C_CMD + 1))
+    done
+    ok "스킬 ${C_SKILL}/${N_SKILL} · 명령 ${C_CMD}/${N_CMD} 복사"
+    # 전부 못 옮겼으면 조용히 넘기지 않는다 — 성공으로 보고하면 없는 명령을 찾게 된다
+    if [ "$C_SKILL" != "$N_SKILL" ] || [ "$C_CMD" != "$N_CMD" ]; then
+      warn "일부가 복사되지 않았습니다. 위 개수를 확인하세요"
+    fi
   fi
 fi
 
-echo "  → 다음 세션에서 /bb-pr-review 와 /bb-review 가 뜹니다"
+# 명령 이름을 손으로 적지 않는다 — 파일이 늘면 이 줄이 낡는다
+if [ "$N_CMD" -gt 0 ]; then
+  CMD_LIST=$(cd "$CMD_DIR" && ls *.md 2>/dev/null | sed 's|\.md$||; s|^|/|' | tr '\n' ' ')
+  echo "  → 다음 세션에서 이것들이 뜹니다: $CMD_LIST"
+fi
 
 say "다음"
 cat <<'NEXT'
