@@ -34,9 +34,18 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 워크플로에 맞춰 �
 ./setup.sh
 ```
 
-키체인 저장(128자 절단·개행→hex 회피), allowlist 파일 생성,
-`claude mcp add` 명령 조립까지 대신한다. 끝나면 세션을 재시작하고
-`bb_doctor` 를 부른다.
+**이 하나로 끝난다.** 키체인 저장(128자 절단·개행→hex 회피), allowlist 파일 생성,
+`claude mcp add` 조립, 그리고 **플러그인(스킬 2개·슬래시 명령 5개) 설치까지** 6단계로
+한다. 끝나면 **세션을 한 번** 재시작하고 `bb_doctor` 를 부른다.
+
+> **실제로 시간이 걸리는 곳은 스크립트가 아니라 그 전에 토큰을 발급하는 일이다.**
+> 비슷한 것이 두 종류인데 하나만 동작하고, Basic 인증의 사용자명이 username 이 아니라
+> **이메일**이며, 스코프를 정확히 골라야 한다 — [Settings.md §3](./Settings.md) 에
+> 절이 일곱 개 붙어 있는 이유다. 막히면 `bb_doctor` 가 겪은 함정(hex 저장·128자 절단·
+> 스코프 부족·allowlist 미설정)을 감지해 **실행할 명령까지** 준다.
+>
+> 비밀 저장소는 **macOS(`security`)만 실측했다.** Linux(`secret-tool`·`pass`)는
+> 명령 존재만 확인한 미검증 경로이고 `setup.sh` 가 경고를 띄운다.
 
 <details>
 <summary>손으로 하려면</summary>
@@ -60,6 +69,12 @@ claude mcp add --scope user \
   --env BITBUCKET_ALLOWED_REPOS_FILE="$HOME/.config/bb-mcp/allowed-repos" \
   --env BITBUCKET_ALLOW_COMMENT=true \
   --transport stdio bitbucket -- $(which node) /absolute/path/bb-mcp/server.mjs
+```
+
+```bash
+# 스킬·슬래시 명령 (서버 등록만으로는 / 목록에 안 뜬다 — §1-1 참고)
+claude plugin marketplace add adanbae-dev/bb-mcp
+claude plugin install bb-pr-review@bb-mcp --scope user
 ```
 
 `npm link` 하면 절대경로 대신 `-- npx bb-mcp` 로 등록할 수 있다.
