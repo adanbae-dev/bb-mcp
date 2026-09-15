@@ -5,6 +5,49 @@
 개인 계정 API 토큰으로 Bitbucket Cloud REST API 2.0에 붙는 최소 MCP 서버.
 Rovo MCP Server를 거치지 않으므로 조직 관리자의 API 토큰 인증 토글과 무관하다.
 
+## In English
+
+**Review Bitbucket Cloud pull requests from Claude Code — without cloning the repo.**
+An MCP server (20 tools) plus a Claude Code plugin (5 slash commands, 2 skills).
+
+Atlassian's Rovo MCP Server does not cover Bitbucket, and `gh`-style tooling does not
+exist for Bitbucket Cloud. This fills that gap: give it a PR number and it fetches the
+diff, commits, file history and existing comments through the REST API.
+
+```
+/bb-prs                     open PRs (auto-detects the repo of the current folder)
+/bb-review acme/web-app 64  read diff + commits + existing comments, draft a review
+/bb-pr-new                  draft a PR from branch commits, create after confirmation
+/bb-doctor                  diagnose setup — gives you the command to run for each problem
+/bb-repos                   list / add allowed repositories
+```
+
+**Deliberately missing: approve and merge.** Those tools were not built and will not be.
+Reviewing gathers evidence; deciding to merge is a person's job.
+
+**Default-deny.** With no allowlist configured it reaches *no* repository. Writes are
+split across five independent gates — you never open merge rights just to leave a review.
+The path guard judges the normalized URL object that is actually sent, closing the
+traversal class described in §7.
+
+**Honest limits.** PR text is attacker-controlled input; responses carry an `_untrusted`
+marker but **it is advisory, not enforced**. §7 lists ten things this does not protect
+against.
+
+### Before you install
+
+- **The review skill writes its output in Korean.** The 20 MCP tools are
+  language-neutral, but `/bb-review` produces Korean review comments. Everything else
+  works regardless of language.
+- **All documentation below is in Korean**, including the setup guide.
+- Requires Node 18+ (verified in CI on 18/20/22/24), an Atlassian **scoped** API token,
+  and macOS for the keychain path — Linux secret backends are implemented but unverified.
+
+Setup is `./setup.sh` (keychain, allowlist, server registration, plugin install) then one
+session restart. The slow part is issuing the token, not the script.
+
+---
+
 ## 무엇을 해주나
 
 Claude Code 에서 **Bitbucket Cloud PR 을 클론 없이 읽고 리뷰한다.** PR 번호만 있으면
