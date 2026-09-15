@@ -1,5 +1,7 @@
 # bitbucket-personal MCP
 
+[![test](https://github.com/adanbae-dev/bb-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/adanbae-dev/bb-mcp/actions/workflows/test.yml)
+
 개인 계정 API 토큰으로 Bitbucket Cloud REST API 2.0에 붙는 최소 MCP 서버.
 Rovo MCP Server를 거치지 않으므로 조직 관리자의 API 토큰 인증 토글과 무관하다.
 
@@ -41,6 +43,7 @@ PR 본문·코멘트·diff 는 남이 쓴 텍스트다. 응답에 `_untrusted` �
 | `test/forbidden.test.mjs` | 사내 이름·실명·티켓 키가 새는지 검사 (해시 대조) |
 | `test/docs.test.mjs` | 툴 시그니처·개수가 README 와 갈렸는지 검사 |
 | `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·서버 등록·플러그인 설치) |
+| `.github/workflows/test.yml` | CI — Node 18·20·22·24 에서 테스트 |
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |

@@ -1,0 +1,26 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # 어느 버전이 깨지는지 보려면 하나가 실패해도 나머지를 돌려야 한다
+      fail-fast: false
+      matrix:
+        # README 가 "Node 18+" 라고 주장한다. 그 주장을 여기서 검증한다.
+        node: [18, 20, 22, 24]
+    name: node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      # forbidden.test.mjs 와 docs.test.mjs 는 git ls-files 를 쓴다.
+      # actions/checkout 이 git 작업 트리를 주므로 얕은 클론에서도 동작한다.
+      - run: npm test
