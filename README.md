@@ -36,9 +36,11 @@ against.
 
 ### Before you install
 
-- **The review skill writes its output in Korean.** The 20 MCP tools are
-  language-neutral, but `/bb-review` produces Korean review comments. Everything else
-  works regardless of language.
+- **Review output follows the language of the PR** — it reads the title, description and
+  existing comments and matches them. Force it with `/bb-review <repo> <id> --en` (or
+  `--ko`). Structural markers stay fixed either way: the 🔴🟠🟡🔵⚪ severity emoji,
+  `### 🔴 1-1.` numbering and `path/to/file.ext:LINE` citations, so replies can reference
+  a finding by number regardless of language.
 - **All documentation below is in Korean**, including the setup guide.
 - Requires Node 18+ (verified in CI on 18/20/22/24), an Atlassian **scoped** API token,
   and macOS for the keychain path — Linux secret backends are implemented but unverified.
@@ -253,7 +255,7 @@ claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 |---|---|
 | `/bb-prs` | 열린 PR 목록만 본다 (**기본은 현재 폴더의 저장소**, `all` 로 전체) |
 | `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성 |
-| `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다 |
+| `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어) |
 | `/bb-pr-review` | 위와 같음 (스킬 직접 호출) |
 | `/bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
 | `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |

@@ -1,6 +1,6 @@
 ---
-description: Bitbucket PR을 bb-mcp로 가져와 한국어 리뷰 코멘트를 작성한다
-argument-hint: [workspace/repo] [PR번호] [경로]
+description: Bitbucket PR을 bb-mcp로 가져와 리뷰 코멘트를 작성한다 (출력 언어는 PR 기준, --ko/--en 로 지정)
+argument-hint: [workspace/repo] [PR번호] [경로] [--ko|--en]
 ---
 
 `bb-pr-review` 스킬을 따라 Bitbucket PR을 리뷰한다.
@@ -10,6 +10,8 @@ argument-hint: [workspace/repo] [PR번호] [경로]
 - 인자가 없으면 `bb_pr_inbox`로 열린 PR을 보여주고 어느 것을 리뷰할지 묻는다.
 - `<workspace>/<repo> <번호>` 형태면 그 PR을 바로 리뷰한다.
 - 세 번째 인자로 경로를 주면 그 파일만 본다.
+- `--ko` / `--en` 은 **출력 언어**다. 없으면 PR 의 언어를 따른다 — 스킬의
+  「출력 언어」 절 참고. 위치는 상관없고, 인자에서 빼고 나머지를 해석한다.
 
 스킬의 실행 순서(대상 확정 → 파일 단위 diff → 기존 코멘트 확인 → 규약 로드 →
 배포 경로 → 라인 검증 → base 대조 → 재현 완주 → 도달 가능성)를 건너뛰지 않는다.

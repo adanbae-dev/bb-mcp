@@ -412,7 +412,7 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 |---|---|
 | `/bb-prs` | 열린 PR 목록만 (리뷰 시작 안 함) |
 | `/bb-pr-new` | PR 초안 작성 + 확인 후 생성 (`ALLOW_PR_CREATE` 필요) |
-| `/bb-review` | PR 리뷰 (인자 없으면 목록부터) |
+| `/bb-review` | PR 리뷰 (인자 없으면 목록부터). `--ko`·`--en` 로 출력 언어 지정 |
 | `/bb-doctor` | 설정 진단 (`quick` 이면 네트워크 없이) |
 | `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
 
