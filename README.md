@@ -286,15 +286,21 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 
 ```bash
 mkdir -p ~/.claude/skills/bb-pr-review ~/.claude/commands
-cp plugin/skills/bb-pr-review/*.md ~/.claude/skills/bb-pr-review/
+cp -R plugin/skills/bb-pr-review/. ~/.claude/skills/bb-pr-review/   # reference/ 포함
 cp plugin/commands/bb-review.md ~/.claude/commands/
 ```
 
 `setup.sh` 6단계가 이걸 대신한다 — 스킬·명령 목록을 디스크에서 만들므로 항목이
 늘어도 따라온다.
 
-스킬의 `trigger:` 프론트매터가 슬래시 명령을 만든다. **`~/.claude/skills/` 에
-있어야 로드되고, 저장소의 `plugin/skills/` 는 설치 없이는 탐색되지 않는다.**
+**슬래시 명령 이름은 스킬 «디렉터리 이름»에서 나온다** — `~/.claude/skills/bb-pr-review/`
+→ `/bb-pr-review`. frontmatter 의 `name` 은 목록에 보이는 표시 이름일 뿐이다(플러그인
+스킬에서는 `name` 이 명령의 마지막 마디가 된다). `trigger:` 같은 필드는 없다 —
+Agent Skills 스펙에도 Claude Code 확장 키에도 없어서 **조용히 무시된다.**
+발동은 `description` 이 결정한다.
+
+**`~/.claude/skills/` 에 있어야 로드되고, 저장소의 `plugin/skills/` 는 설치 없이는
+탐색되지 않는다.**
 
 ### 플러그인은 MCP 서버를 설치하지 않는다
 
