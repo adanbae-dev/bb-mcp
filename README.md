@@ -97,6 +97,8 @@ PR 본문·코멘트·diff 는 남이 쓴 텍스트다. 응답에 `_untrusted` �
 | [`CLAUDE.md`](./CLAUDE.md) | 이 저장소에서 반복해 대가를 치른 작업 규칙 7개 |
 | [`LICENSE`](./LICENSE) | MIT |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 변경 이력 |
+| [`docs/review-principles.md`](./docs/review-principles.md) | 리뷰 5대 원칙 — 스킬이 구현하는 단일 소스 |
+| [`docs/pr-template.md`](./docs/pr-template.md) | PR 설명 템플릿 4개 절 (테스트가 스킬과의 일치를 강제) |
 | [`docs/posts/`](./docs/posts) | 만들며 틀린 것을 정리한 글 (아래 「기록」) |
 | `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
@@ -255,7 +257,7 @@ claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 | 명령 | 하는 일 |
 |---|---|
 | `/bb-prs` | 열린 PR 목록만 본다 (**기본은 현재 폴더의 저장소**, `all` 로 전체) |
-| `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성 |
+| `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성. 설명은 템플릿 4개 절 고정 |
 | `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어) |
 | `/bb-pr-review` | 위와 같음 (스킬 직접 호출) |
 | `/bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
