@@ -38,7 +38,7 @@ against.
 
 - **Review output follows the language of the PR** — it reads the title, description and
   existing comments and matches them. Force it with `/bb-review <repo> <id> --en` (or
-  `--ko`). Structural markers stay fixed either way: the 🔴🟠🟡🔵⚪ severity emoji,
+  `--ko`). Structural markers stay fixed either way: the 🔴🟠🟡🔵⚪📄 category emoji,
   `### 🔴 1-1.` numbering and `path/to/file.ext:LINE` citations, so replies can reference
   a finding by number regardless of language.
 - **All documentation below is in Korean**, including the setup guide.

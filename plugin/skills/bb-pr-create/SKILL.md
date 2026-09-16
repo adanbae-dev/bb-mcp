@@ -139,7 +139,7 @@ bb_branch_commits(repo, branch, exclude=<대상 브랜치>)
 `Feature/BRANCH-NAME` 같은 자동 생성 제목을 만들지 않는다 — 실측한 저장소에
 그런 제목이 여러 개 있었고 리뷰어에게 아무 정보를 주지 않는다.
 
-**설명** — [`docs/pr-template.md`](../../../docs/pr-template.md) 의 4개 절을 쓴다.
+**설명** — [`docs/pr-template.md`](../../../docs/pr-template.md) 의 5개 절을 쓴다.
 **절을 늘리거나 줄이지 않는다.**
 
 ```markdown

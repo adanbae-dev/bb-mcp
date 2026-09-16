@@ -55,12 +55,15 @@ argument-hint: [workspace/repo] [branch] [destination]
 **## 동작 확인 절차**
 확인 필요 — 커밋에 검증 기록이 없다
 
+**## 커밋**
+`a1b2c3d4e5f6` fix: 마감 시각 포맷 (외 2개)
+
 ---
 뒤 두 절은 커밋에서 뽑을 수 없습니다. 채워 주시면 반영하겠습니다.
 이대로 생성할까요?
 ```
 
-설명은 [`docs/pr-template.md`](../../docs/pr-template.md) 의 **4개 절 고정**이다.
+설명은 [`docs/pr-template.md`](../../docs/pr-template.md) 의 **5개 절 고정**이다.
 절을 늘리거나 줄이지 않는다.
 
 - **푸시되지 않은 커밋이 있으면 표에 그대로 적는다** — `커밋 | 3개 (1개 미푸시 🟠)`.
