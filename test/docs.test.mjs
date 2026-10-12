@@ -65,15 +65,21 @@ const read = (f) => readFileSync(f, "utf8");
 function templateSections(path) {
   const block = read(path).match(/^```markdown\n([\s\S]*?)^```$/m)?.[1];
   assert.ok(block, `${path} 에 \`\`\`markdown 템플릿 블록이 없다`);
-  return [...block.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
+  return headings(block);
 }
+
+const headings = (text) => [...text.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
+
+// 템플릿 단일 소스. 플러그인과 함께 배포돼야 스킬이 읽을 수 있다
+const TEMPLATE = "plugin/skills/bb-pr-create/pull_request_template.md";
 
 test("PR 템플릿의 절이 생성 스킬·명령과 일치한다", () => {
   // **양방향으로 센다.** 이전 판은 절 이름 4개를 정규식에 박아 두고 '있는가' 만
   // 봤다. 그래서 스킬 쪽 예시에만 `## 커밋` 이 늘어난 것을 놓쳤고, 스킬 본문은
   // "절을 늘리지 않는다" 라고 적은 채로 테스트가 통과했다 — CLAUDE.md §4 대로
   // 예시가 이기므로 실제 출력은 5절이 됐을 것이다.
-  const tpl = templateSections("docs/pr-template.md");
+  // 0.23.0 부터 단일 소스는 Bitbucket 이 읽는 형태 그대로의 파일이다(코드블록 없음)
+  const tpl = headings(read(TEMPLATE));
   assert.ok(tpl.length >= 4, `템플릿 절이 너무 적다: ${tpl.join(", ")}`);
 
   const skill = templateSections("plugin/skills/bb-pr-create/SKILL.md");
@@ -85,10 +91,30 @@ test("PR 템플릿의 절이 생성 스킬·명령과 일치한다", () => {
   assert.deepEqual(shown, tpl, "bb-pr-new 초안 미리보기의 절이 단일 소스와 다르다");
 
   // 절 개수를 글로 적어 둔 곳도 같이 센다 — 숫자는 조용히 낡는다
-  for (const f of ["plugin/skills/bb-pr-create/SKILL.md", "plugin/commands/bb-pr-new.md"]) {
+  // README 는 0.22.0 에 5절이 된 뒤에도 "4개 절" 이었다 — 여기서 안 셌기 때문이다
+  for (const f of ["plugin/skills/bb-pr-create/SKILL.md", "plugin/commands/bb-pr-new.md", "README.md"]) {
     const n = read(f).match(/(\d+)개 절/)?.[1];
     assert.equal(n, String(tpl.length), `${f} 가 '${n}개 절' 이라고 적었다 (실제 ${tpl.length})`);
   }
+});
+
+test("PR 템플릿의 리뷰 규칙이 리뷰 스킬의 등급과 같다", () => {
+  // 사람이 읽는 📌 규칙과 AI 리뷰의 등급이 갈리면 같은 P1 이 두 뜻이 된다
+  const tpl = read(TEMPLATE);
+  const rules = tpl.slice(tpl.indexOf("### 📌"));
+  for (const g of ["P1", "P2", "P3", "Q"]) {
+    assert.ok(rules.includes(`**${g}**`), `템플릿 리뷰 규칙에 ${g} 가 없다`);
+  }
+  assert.ok(rules.includes("미해결 P1"), "템플릿이 승인 기준(미해결 P1 없음)을 적지 않았다");
+  // 스킬이 실제로 템플릿 파일을 읽으라고 한다 — 링크만 있고 안 읽히면 절이 갈린다
+  assert.ok(
+    read("plugin/skills/bb-pr-create/SKILL.md").includes("(pull_request_template.md)"),
+    "bb-pr-create 스킬이 템플릿 파일을 가리키지 않는다",
+  );
+  assert.ok(
+    read("docs/pr-template.md").includes(TEMPLATE),
+    "docs/pr-template.md 가 단일 소스 파일을 가리키지 않는다",
+  );
 });
 
 test("스킬이 단일 소스 문서를 가리킨다", () => {
@@ -124,13 +150,13 @@ test("리뷰 분량 상한이 스킬에 있고 명령이 그것을 가리킨다"
   // 넘겼는지 판정할 수 없었다. 상한과 예시가 사라지면 같은 일이 반복된다.
   const skill = read("plugin/skills/bb-pr-review/SKILL.md");
   assert.ok(skill.includes("## 분량 — 세어서 지킨다"), "분량 절이 없다");
-  for (const row of ["🔴 지적 1건", "🟠🟡🔵⚪ 지적 1건"]) {
+  for (const row of ["P1 지적 1건", "P2·P3 지적 1건", "Q 1건", "「사람 리뷰 필요 영역」"]) {
     assert.ok(skill.includes(row), `분량 표에 '${row}' 행이 없다`);
   }
   // 규칙 문장보다 예시가 세다(CLAUDE.md §4) — 완성된 지적 하나가 실제 상한을 정한다.
   // ❌ 쪽은 「제일 먼저 지우는 것」 목록과 같은 말이라 지웠다.
   const example = skill.match(/^````markdown\n([\s\S]*?)^````$/m)?.[1] ?? "";
-  assert.match(example, /^### 🔴 1-1\. /m, "분량 절에 완성된 지적 예시가 없다");
+  assert.match(example, /^### P1-1\. \[[^\]]+\] /m, "분량 절에 완성된 지적 예시가 없다");
   assert.ok(example.split("\n").length <= 16, `예시가 ${example.split("\n").length}줄 — 상한보다 길다`);
 
   assert.ok(
@@ -139,19 +165,17 @@ test("리뷰 분량 상한이 스킬에 있고 명령이 그것을 가리킨다"
   );
 });
 
-test("리뷰 분류 축의 개수·이모지가 네 파일에서 같다", () => {
+test("리뷰 분류 태그의 개수가 네 파일에서 같고 영어 대응이 있다", () => {
   // 📄(기록·설명)를 6번째로 넣으면서 '5개 분류' 가 네 곳에 흩어져 있는 것을 발견했다.
-  // 숫자와 이모지 묶음은 코드가 아니라 글이라 갈려도 아무 데서도 안 터진다.
+  // 숫자와 태그 묶음은 코드가 아니라 글이라 갈려도 아무 데서도 안 터진다.
   const skill = read("plugin/skills/bb-pr-review/SKILL.md");
-  const items = [
-    ...skill.matchAll(/^\d+\. (\p{Emoji_Presentation}|📄) \*\*/gmu),
-  ].map((m) => m[1]);
-  assert.ok(items.length >= 5, `리뷰 항목을 못 읽었다: ${items.length}개`);
+  const items = [...skill.matchAll(/^\d+\. `\[([^\]]+)\]` — /gm)].map((m) => m[1]);
+  assert.ok(items.length >= 5, `분류 태그를 못 읽었다: ${items.length}개`);
 
-  // 「언어 무관」 절의 이모지 묶음에 전부 들어 있어야 한다
-  const set = skill.match(/이모지 체계\(([^)]+)\)/)?.[1];
-  for (const e of items) {
-    assert.ok(set?.includes(e), `이모지 묶음에 ${e} 가 없다: ${set}`);
+  // 영어로 쓸 때 태그가 즉석 번역되면 grep 이 깨진다
+  const english = read("plugin/skills/bb-pr-review/reference/english.md");
+  for (const t of items) {
+    assert.ok(english.includes(`\`[${t}]\``), `english.md 에 [${t}] 대응이 없다`);
   }
 
   // 개수를 글로 적어 둔 세 곳
@@ -163,6 +187,34 @@ test("리뷰 분류 축의 개수·이모지가 네 파일에서 같다", () => 
   ]) {
     const said = read(f).match(/(\d+)개 분류/)?.[1];
     assert.equal(said, n, `${f} 가 '${said}개 분류' 라고 적었다 (실제 ${n})`);
+  }
+});
+
+test("리뷰 등급이 P1/P2/P3/Q 이고 옛 이모지 체계가 남아 있지 않다", () => {
+  // 0.23.0 에서 분류 이모지(심각도를 겸했다)를 등급으로 바꿨다. 한 파일에라도
+  // 옛 체계가 남으면 모델이 두 체계를 섞어 쓴다 — 예시가 규칙을 이긴다(CLAUDE.md §4).
+  const skill = read("plugin/skills/bb-pr-review/SKILL.md");
+  for (const g of ["P1", "P2", "P3", "Q"]) {
+    assert.ok(skill.includes(`| \`${g}\` |`), `등급 표에 ${g} 가 없다`);
+  }
+  assert.ok(skill.includes("### 사람 리뷰 필요 영역"), "사람 리뷰 필요 영역 절이 없다");
+  assert.match(skill, /^P1 \d+건 \/ P2 \d+건 \/ P3 \d+건 \/ Q \d+건$/m, "종합 의견 총계 예시가 없다");
+
+  // 상태 표시(bb-doctor·bb-repos 의 🔴🟠)와 승인 상태(🟢/🔴)는 다른 용도라 대상에서 뺀다
+  const files = [
+    "plugin/skills/bb-pr-review/SKILL.md",
+    "plugin/skills/bb-pr-review/README.md",
+    "plugin/commands/bb-review.md",
+    "docs/review-principles.md",
+    ...readdirSync("plugin/skills/bb-pr-review/reference").map(
+      (f) => `plugin/skills/bb-pr-review/reference/${f}`,
+    ),
+  ];
+  for (const f of files) {
+    // re-review.md 는 옛 번호를 인용하는 법을 설명하느라 한 번 쓴다
+    const text = read(f).replace("`🔴 1-1`", "");
+    const hit = text.match(/[🔴🟠🟡🔵⚪📄]/u);
+    assert.equal(hit, null, `${f} 에 옛 분류 이모지 ${hit?.[0]} 가 남아 있다`);
   }
 });
 

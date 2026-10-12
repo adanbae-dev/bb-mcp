@@ -17,8 +17,10 @@ Bitbucket PR은 이 스킬을 쓴다.
 
 | | `/pr-review-ko` | `/bb-pr-review` |
 |---|---|---|
-| 6개 분류·이모지·`path:LINE`·`## 종합 의견` | 동일 | 동일 |
-| 심각도 산정(🔴은 도입 + 도달 둘 다) | 동일 | 동일 |
+| 6개 분류·`path:LINE`·`## 종합 의견` | 동일 | 동일 |
+| 심각도 표기 | 분류 이모지 | **P1/P2/P3/Q 등급 + 분류 태그** (0.23.0~) |
+| 최상위 등급 조건(도입 + 도달 둘 다) | 동일 | 동일 |
+| 사람 리뷰 필요 영역 · 등급 총계 | 없음 | **있음** |
 | 읽기 전용 기본 | 동일 | 동일 |
 | diff 확보 | `git diff base...head` | `bb_pr_files` → `bb_pr_diff(path)` |
 | 라인 검증 | `git show head:path \| cat -n` | `bb_file(ref=source_commit, start, end)` |

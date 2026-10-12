@@ -17,7 +17,7 @@ warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 die()  { printf '  \033[31m✖\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ── 1. 사전 확인 ──────────────────────────────────────────────────────
-say "1/6  사전 확인"
+say "1/7  사전 확인"
 
 command -v node >/dev/null || die "node 를 찾을 수 없습니다"
 NODE_BIN="$(command -v node)"
@@ -43,12 +43,12 @@ else
   warn "토큰이 ~/.claude.json 에 평문으로 저장됩니다."
 fi
 
-say "2/6  의존성"
+say "2/7  의존성"
 (cd "$DIR" && npm install --silent) && ok "설치 완료"
 (cd "$DIR" && npm test >/dev/null 2>&1) && ok "테스트 통과" || die "테스트 실패 — npm test 로 확인하세요"
 
 # ── 3. 토큰 ──────────────────────────────────────────────────────────
-say "3/6  토큰"
+say "3/7  토큰"
 cat <<'HINT'
   Atlassian 계정 → Security → "Create API token with scopes" 로 발급합니다.
   (스코프 없는 "Create API token" 으로 만들면 Bitbucket 에서 동작하지 않습니다)
@@ -121,7 +121,7 @@ else
 fi
 
 # ── 4. 허용 저장소 ────────────────────────────────────────────────────
-say "4/6  허용 저장소"
+say "4/7  허용 저장소"
 if [ -s "$ALLOWLIST" ] && grep -qvE '^\s*(#|$)' "$ALLOWLIST"; then
   chmod 600 "$ALLOWLIST" 2>/dev/null || true
   # BSD grep -c 는 끝 개행이 없는 마지막 줄을 세지 않는다. awk 로 센다.
@@ -147,7 +147,7 @@ else
 fi
 
 # ── 5. 등록 ──────────────────────────────────────────────────────────
-say "5/6  등록"
+say "5/7  등록"
 C=""; read -rp "  bb_comment(PR 코멘트 작성)를 허용할까요? [y/N] " C || true
 ALLOW_COMMENT=$([ "${C:-N}" = "y" ] && echo true || echo false)
 
@@ -184,7 +184,7 @@ fi
 #   (a) claude plugin  — ~/.claude/plugins/cache/... 에 놓인다. 갱신·제거가 쉽다
 #   (b) 직접 복사       — ~/.claude/skills/ 와 ~/.claude/commands/ 에 놓인다.
 #                        claude CLI 가 없어도 된다
-say "6/6  스킬·슬래시 명령"
+say "6/7  스킬·슬래시 명령"
 # 개별 파일을 나열하지 않는다. 전에 스킬 1개·명령 1개만 복사하면서 성공으로
 # 보고했고(실제로는 스킬 2개·명령 5개) 새로 추가한 것이 조용히 빠졌다.
 # 목록은 디스크에서 만든다 — 그러면 늘어나도 저절로 따라온다.
@@ -277,6 +277,33 @@ if [ "$N_CMD" -gt 0 ]; then
   CMD_LIST=$(cd "$CMD_DIR" && ls *.md 2>/dev/null | sed 's|\.md$||; s|^|/|' | tr '\n' ' ')
   echo "  → 다음 세션에서 이것들이 뜹니다: $CMD_LIST"
 fi
+
+# ── 7. PR 템플릿 (선택) ──────────────────────────────────────────────
+# 남의 저장소에 파일을 쓰는 단계라 기본은 건너뛴다. 커밋·푸시는 하지 않는다.
+say "7/7  Bitbucket PR 템플릿 (선택)"
+echo "  팀 저장소의 로컬 클론에 .bitbucket/pull_request_template.md 를 복사합니다."
+echo "  리뷰 등급(P1/P2/P3/Q)과 같은 규칙이 들어 있습니다. 커밋·푸시는 하지 않습니다."
+T=""; read -rp "  Bitbucket PR 템플릿을 설정할까요? [y/N] " T || true
+case "$T" in
+  y|Y)
+    echo "  로컬 클론 경로를 한 줄씩. 빈 줄로 종료."
+    REPOS=()
+    while true; do
+      P=""; read -rep "  > " P || break
+      [ -n "$P" ] || break
+      REPOS+=("${P/#\~/$HOME}")
+    done
+    if [ "${#REPOS[@]}" -gt 0 ]; then
+      "$DIR/scripts/install-pr-template.sh" "${REPOS[@]}" \
+        || warn "일부 저장소에 복사하지 못했습니다. 위 메시지를 확인하세요"
+    else
+      warn "경로를 받지 못해 건너뜁니다"
+    fi
+    ;;
+  *)
+    echo "  건너뜁니다. 나중에: $DIR/scripts/install-pr-template.sh <저장소 경로>"
+    ;;
+esac
 
 say "다음"
 cat <<'NEXT'

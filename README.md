@@ -38,8 +38,8 @@ against.
 
 - **Review output follows the language of the PR** — it reads the title, description and
   existing comments and matches them. Force it with `/bb-review <repo> <id> --en` (or
-  `--ko`). Structural markers stay fixed either way: the 🔴🟠🟡🔵⚪📄 category emoji,
-  `### 🔴 1-1.` numbering and `path/to/file.ext:LINE` citations, so replies can reference
+  `--ko`). Structural markers stay fixed either way: the `P1`/`P2`/`P3`/`Q` severity,
+  `### P1-1.` numbering and `path/to/file.ext:LINE` citations, so replies can reference
   a finding by number regardless of language.
 - **All documentation below is in Korean**, including the setup guide.
 - Requires Node 18+ (verified in CI on 18/20/22/24), an Atlassian **scoped** API token,
@@ -57,7 +57,7 @@ Claude Code 에서 **Bitbucket Cloud PR 을 클론 없이 읽고 리뷰한다.**
 
 ```
 /bb-prs                     열린 PR 목록 (현재 폴더의 저장소를 자동 감지)
-/bb-review acme/web-app 64  diff·커밋·기존 코멘트를 읽고 한국어 리뷰 초안
+/bb-review acme/web-app 64  diff·커밋·기존 코멘트를 읽고 P1/P2/P3/Q 등급 리뷰 초안
 /bb-pr-new                  브랜치 커밋으로 PR 초안 → 확인받고 생성
 /bb-doctor                  설정 진단 — 문제마다 실행할 명령까지 준다
 /bb-repos                   허용 저장소 확인·추가
@@ -94,11 +94,13 @@ PR 본문·코멘트·diff 는 남이 쓴 텍스트다. 응답에 `_untrusted` �
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
 | `plugin/skills/bb-pr-create/` | PR 생성 스킬 (초안 작성 + 중복 검사) |
 | `plugin/commands/` | `/bb-review`, `/bb-prs`, `/bb-pr-new`, `/bb-doctor`, `/bb-repos` |
+| `scripts/install-pr-template.sh` | PR 템플릿을 저장소 로컬 클론의 `.bitbucket/` 에 복사 (커밋·푸시 안 함) |
 | [`CLAUDE.md`](./CLAUDE.md) | 이 저장소에서 반복해 대가를 치른 작업 규칙 7개 |
 | [`LICENSE`](./LICENSE) | MIT |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 변경 이력 |
-| [`docs/review-principles.md`](./docs/review-principles.md) | 리뷰 5대 원칙 — 스킬이 구현하는 단일 소스 |
-| [`docs/pr-template.md`](./docs/pr-template.md) | PR 설명 템플릿 4개 절 (테스트가 스킬과의 일치를 강제) |
+| [`docs/review-principles.md`](./docs/review-principles.md) | 리뷰 5대 원칙 + 코멘트 등급(P1/P2/P3/Q)의 출처와 사람이 지키는 운영 규칙 |
+| [`docs/pr-template.md`](./docs/pr-template.md) | PR 템플릿 채우는 규칙 · 팀 저장소에 거는 법(`.bitbucket/pull_request_template.md`) |
+| [`plugin/skills/bb-pr-create/pull_request_template.md`](./plugin/skills/bb-pr-create/pull_request_template.md) | PR 템플릿 단일 소스 — 6개 절 + 리뷰 규칙(P1/P2/P3/Q). 팀 저장소에 그대로 복사 |
 | [`docs/posts/`](./docs/posts) | 만들며 틀린 것을 정리한 글 (아래 「기록」) |
 | `.mcp.json.example` | project 스코프 설정 예시 |
 | [`Settings.md`](./Settings.md) | **설정 절차와 트러블슈팅** |
@@ -115,7 +117,7 @@ PR 본문·코멘트·diff 는 남이 쓴 텍스트다. 응답에 `_untrusted` �
 
 **이 하나로 끝난다.** 키체인 저장(128자 절단·개행→hex 회피), allowlist 파일 생성,
 `claude mcp add` 조립, 그리고 **플러그인(스킬 2개·슬래시 명령 5개) 설치까지** 6단계로
-한다. 끝나면 **세션을 한 번** 재시작하고 `bb_doctor` 를 부른다.
+한다. 7단계는 선택이다 — 묻고 나서만 팀 저장소에 Bitbucket PR 템플릿을 복사한다. 끝나면 **세션을 한 번** 재시작하고 `bb_doctor` 를 부른다.
 
 > **실제로 시간이 걸리는 곳은 스크립트가 아니라 그 전에 토큰을 발급하는 일이다.**
 > 비슷한 것이 두 종류인데 하나만 동작하고, Basic 인증의 사용자명이 username 이 아니라
@@ -257,8 +259,8 @@ claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 | 명령 | 하는 일 |
 |---|---|
 | `/bb-prs` | 열린 PR 목록만 본다 (**기본은 현재 폴더의 저장소**, `all` 로 전체) |
-| `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성. 설명은 템플릿 4개 절 고정 |
-| `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어) |
+| `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성. 설명은 저장소 템플릿 우선, 없으면 기본 템플릿 6개 절 |
+| `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어). 지적마다 P1/P2/P3/Q 등급, 종합 의견에 등급 총계 |
 | `/bb-pr-review` | 위와 같음 (스킬 직접 호출) |
 | `/bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
 | `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
@@ -547,7 +549,7 @@ MCP 서버는 Claude Code 가 프로젝트마다 따로 띄우므로 그 cwd 가
 - **3건 이하** — 머리글이 내용보다 길어진다
 - **허용 저장소 목록** — 열이 하나뿐이라 나열이 읽기 좋다
 - **빈 결과** — 머리글만 있는 표를 만들지 않는다. 한 줄로 말한다
-- **리뷰 본문** — ①무엇 ②재현 ③수정이 들어갈 자리가 없어진다.
+- **리뷰 본문** — ①요청 ②무엇 ③재현이 들어갈 자리가 없어진다.
   `bb-pr-review` 스킬의 고정 포맷을 그대로 쓴다
 
 ### 리뷰 한 바퀴
