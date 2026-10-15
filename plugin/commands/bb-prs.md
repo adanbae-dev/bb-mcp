@@ -5,7 +5,7 @@ argument-hint: [all | workspace/repo] [OPEN|MERGED|DECLINED]
 
 인자: $ARGUMENTS
 
-리뷰를 시작하지 않는다. **목록만** 보여준다. 리뷰까지 갈 거면 `/bb-review` 를 쓴다.
+리뷰를 시작하지 않는다. **목록만** 보여준다. 리뷰까지 갈 거면 `/bb-pr-review:bb-review` 를 쓴다.
 
 ## 범위를 정하는 순서
 
@@ -42,8 +42,8 @@ argument-hint: [all | workspace/repo] [OPEN|MERGED|DECLINED]
 
 `feature/PROJ-14404` → `dev`
 
-→ 리뷰: `/bb-review acme/web-app 64`
-→ 전체 저장소: `/bb-prs all`
+→ 리뷰: `/bb-pr-review:bb-review acme/web-app 64`
+→ 전체 저장소: `/bb-pr-review:bb-prs all`
 ```
 
 ### 전체를 봤을 때
@@ -56,7 +56,7 @@ argument-hint: [all | workspace/repo] [OPEN|MERGED|DECLINED]
 | acme/web-app | 173 | Feature/PROJ-16998 vote 💬4 | 김철수 | 09-03 |
 | acme/admin-web | 74 | fix: 검색 결과 문구 수정 | 이영희 | 09-02 |
 
-→ 리뷰: `/bb-review <ws>/<repo> <번호>`
+→ 리뷰: `/bb-pr-review:bb-review <ws>/<repo> <번호>`
 ```
 
 **어느 범위로 봤는지 제목이 말해준다.** 제목만으로 부족하면(감지 실패 등)
@@ -102,10 +102,10 @@ argument-hint: [all | workspace/repo] [OPEN|MERGED|DECLINED]
 
 | 응답 | 뜻 | 안내 |
 |---|---|---|
-| `허용 저장소가 설정되지 않아` | allowlist 미설정 | `/bb-repos` 로 상태 확인 → 파일 작성 후 세션 재시작 |
+| `허용 저장소가 설정되지 않아` | allowlist 미설정 | `/bb-pr-review:bb-repos` 로 상태 확인 → 파일 작성 후 세션 재시작 |
 | `allowlist가 없어` | `open` 모드라 대상을 못 정함 | 저장소를 인자로 지정하거나 allowlist 를 만든다 |
-| `허용되지 않은 저장소` | allowlist 밖 | `/bb-repos` 로 목록 확인 |
-| `bb_*` 툴이 없음 | 서버 미등록·연결 실패 | `/bb-doctor`, 안 되면 `claude mcp get bitbucket` |
+| `허용되지 않은 저장소` | allowlist 밖 | `/bb-pr-review:bb-repos` 로 목록 확인 |
+| `bb_*` 툴이 없음 | 서버 미등록·연결 실패 | `/bb-pr-review:bb-doctor`, 안 되면 `claude mcp get bitbucket` |
 
 `bb_pr_inbox` 는 저장소별로 실패해도 나머지를 돌려준다. 응답에 `errors` 가
 있으면 표 아래에 **어느 저장소가 왜 실패했는지 따로 적는다** — 조용히 빼먹지

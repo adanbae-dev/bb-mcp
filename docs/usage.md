@@ -36,9 +36,9 @@ PR을 가져와 분석하고 리뷰 코멘트를 다는 흐름에 맞춰 전용 
 저장소 하나가 실패해도 나머지는 그대로 오고, 실패는 `errors`에 모인다.
 저장소가 여럿일 때 리뷰의 출발점이다.
 
-목록만 볼 때는 `/bb-prs`, 리뷰까지 갈 때는 `/bb-review` 를 쓴다 (플러그인 — [설치](./install.md) 「슬래시 명령으로 쓰기 — 플러그인」).
-`/bb-prs` 는 **현재 폴더의 저장소**를 기본으로 보고 거기서 끝낸다 — 리뷰를 시작하지 않는다.
-전체를 보려면 `/bb-prs all`. 폴더가 Bitbucket 클론이 아니면 전체로 폴백하고 그 사실을 밝힌다.
+목록만 볼 때는 `/bb-pr-review:bb-prs`, 리뷰까지 갈 때는 `/bb-pr-review:bb-review` 를 쓴다 (플러그인 — [설치](./install.md) 「슬래시 명령으로 쓰기 — 플러그인」).
+`/bb-pr-review:bb-prs` 는 **현재 폴더의 저장소**를 기본으로 보고 거기서 끝낸다 — 리뷰를 시작하지 않는다.
+전체를 보려면 `/bb-pr-review:bb-prs all`. 폴더가 Bitbucket 클론이 아니면 전체로 폴백하고 그 사실을 밝힌다.
 `bb_pr_inbox` → `bb_pr_get` → `bb_pr_files` → `bb_pr_diff(path)` → `bb_pr_comments`
 순서를 `bb-pr-review` 스킬이 안내한다.
 
@@ -100,9 +100,9 @@ MCP 서버는 Claude Code 가 프로젝트마다 따로 띄우므로 그 cwd 가
 
 | 명령 | 감지 성공 | 감지 실패 |
 |---|---|---|
-| `/bb-prs` | 그 저장소의 PR | 전체 목록으로 폴백 (이유를 밝힌다) |
-| `/bb-review` | 그 저장소의 PR에서 고르게 | 선택창 |
-| `/bb-pr-new` | 그 저장소·브랜치로 초안 | 선택창 |
+| `/bb-pr-review:bb-prs` | 그 저장소의 PR | 전체 목록으로 폴백 (이유를 밝힌다) |
+| `/bb-pr-review:bb-review` | 그 저장소의 PR에서 고르게 | 선택창 |
+| `/bb-pr-review:bb-pr-new` | 그 저장소·브랜치로 초안 | 선택창 |
 
 **예외를 두지 않는다.** 프로젝트 폴더에서 부르면 그 프로젝트가 범위다.
 전체를 원하면 `all` 이나 저장소를 명시한다.
@@ -149,7 +149,7 @@ MCP 서버는 Claude Code 가 프로젝트마다 따로 띄우므로 그 cwd 가
 
 `feature/PROJ-14404` → `dev`
 
-→ 리뷰: /bb-review acme/web-app 64
+→ 리뷰: /bb-pr-review:bb-review acme/web-app 64
 ```
 
 코드블록 안에서 공백으로 폭을 맞추지 않는다. 터미널이 GFM 을 렌더링하므로 실제
@@ -212,7 +212,7 @@ bb_branch_commits(repo, branch, exclude=<대상>)   무엇이 올라가는지
 bb_pr_create(repo, title, source_branch, ...)     확인받은 뒤 생성
 ```
 
-`/bb-pr-new` 로 부르면 커밋을 읽어 **제목·설명 초안을 만들고 확인을 받은 뒤** 생성한다.
+`/bb-pr-review:bb-pr-new` 로 부르면 커밋을 읽어 **제목·설명 초안을 만들고 확인을 받은 뒤** 생성한다.
 `bb_pr_create` 는 같은 source 브랜치로 열린 PR이 이미 있으면 만들지 않고 그 PR을 알려준다 —
 푸시만으로 반영되므로 새로 만들 필요가 없다.
 

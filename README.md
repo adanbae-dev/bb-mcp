@@ -15,12 +15,14 @@ exist for Bitbucket Cloud. This fills that gap: give it a PR number and it fetch
 diff, commits, file history and existing comments through the REST API.
 
 ```
-/bb-prs                     open PRs (auto-detects the repo of the current folder)
-/bb-review acme/web-app 64  read diff + commits + existing comments, draft a review
-/bb-pr-new                  draft a PR from branch commits, create after confirmation
-/bb-doctor                  diagnose setup — gives you the command to run for each problem
-/bb-repos                   list / add allowed repositories
+/bb-pr-review:bb-prs                     open PRs (auto-detects the repo of the current folder)
+/bb-pr-review:bb-review acme/web-app 64  read diff + commits + existing comments, draft a review
+/bb-pr-review:bb-pr-new                  draft a PR from branch commits, create after confirmation
+/bb-pr-review:bb-doctor                  diagnose setup — gives the command to run for each problem
+/bb-pr-review:bb-repos                   list / add allowed repositories
 ```
+
+Plugin commands are namespaced: type `/bb-pr-review:bb-review`, not `/bb-review`.
 
 **Deliberately missing: approve and merge.** Those tools were not built and will not be.
 Reviewing gathers evidence; deciding to merge is a person's job.
@@ -37,7 +39,7 @@ ten things this does not protect against.
 ### Before you install
 
 - **Review output follows the language of the PR** — it reads the title, description and
-  existing comments and matches them. Force it with `/bb-review <repo> <id> --en` (or
+  existing comments and matches them. Force it with `/bb-pr-review:bb-review <repo> <id> --en` (or
   `--ko`). Structural markers stay fixed either way: the `P1`/`P2`/`P3`/`Q` severity,
   `### P1-1.` numbering and `path/to/file.ext:LINE` citations, so replies can reference
   a finding by number regardless of language.
@@ -83,7 +85,7 @@ Claude Code 에서 **Bitbucket Cloud PR 을 클론 없이 읽고 리뷰한다.**
 ```bash
 git clone https://github.com/adanbae-dev/bb-mcp && cd bb-mcp
 ./setup.sh          # 키체인 · 허용 저장소 · 서버 등록 · 플러그인 설치 (+ 선택: PR 템플릿)
-# 세션 재시작 → /bb-doctor
+# 세션 재시작 → /bb-pr-review:bb-doctor
 ```
 
 - **시간이 드는 곳은 스크립트가 아니라 토큰 발급이다.** Atlassian **scoped** API 토큰,
@@ -95,7 +97,7 @@ git clone https://github.com/adanbae-dev/bb-mcp && cd bb-mcp
   비대화식 git 인증이 필요하다 — [docs/install.md](./docs/install.md) 「Bitbucket 저장소에서 받아 쓰기」
 - 저장소 루트에 `.mcp.json` 을 두지 않는다 — 프로젝트 스코프가 서버 등록을 덮어쓴다
 - Node 18+. 비밀 저장소는 macOS(`security`)만 실측했다
-- 막히면 `/bb-doctor` — 겪은 함정(hex 저장 · 128자 절단 · 스코프 부족 · allowlist 미설정)을
+- 막히면 `/bb-pr-review:bb-doctor` — 겪은 함정(hex 저장 · 128자 절단 · 스코프 부족 · allowlist 미설정)을
   감지해 **실행할 명령까지** 준다
 
 손으로 설치하는 법, 플러그인 갈아타기, 환경변수 전체 → [docs/install.md](./docs/install.md)
@@ -104,12 +106,15 @@ git clone https://github.com/adanbae-dev/bb-mcp && cd bb-mcp
 
 | 명령 | 하는 일 |
 |---|---|
-| `/bb-prs` | 열린 PR 목록만 본다 (**기본은 현재 폴더의 저장소**, `all` 로 전체) |
-| `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성. 설명은 저장소 템플릿 우선, 없으면 기본 템플릿 6개 절 |
-| `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어). 지적마다 P1/P2/P3/Q 등급과 분류 태그, 머리말 아래 지적 목록 표(번호·분류·위치·요청), 종합 의견에 등급 총계 |
-| `/bb-pr-review` | 위와 같음 (스킬 직접 호출) |
-| `/bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
-| `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
+| `/bb-pr-review:bb-prs` | 열린 PR 목록만 본다 (**기본은 현재 폴더의 저장소**, `all` 로 전체) |
+| `/bb-pr-review:bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성. 설명은 저장소 템플릿 우선, 없으면 기본 템플릿 6개 절 |
+| `/bb-pr-review:bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어). 지적마다 P1/P2/P3/Q 등급과 분류 태그, 머리말 아래 지적 목록 표(번호·분류·위치·요청), 종합 의견에 등급 총계 |
+| `/bb-pr-review:bb-pr-review` | 위와 같음 (스킬 직접 호출) |
+| `/bb-pr-review:bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
+| `/bb-pr-review:bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
+
+플러그인 명령은 **플러그인 이름이 앞에 붙는다** — 짧은 `/bb-review` 는 실행되지 않는다.
+짧은 이름은 `setup.sh` 에서 직접 복사를 고른 경우에만 동작한다 → [docs/install.md](./docs/install.md)
 
 **리뷰 결과의 모양** — 고정 포맷이라 답글에서 번호로 지적을 가리킬 수 있다.
 

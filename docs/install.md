@@ -65,7 +65,12 @@ Node 18+ (전역 `fetch`, `AbortSignal.timeout`). 검증은 Node 24.18 / sdk 1.3
 
 MCP 서버만 등록하면 툴 20개가 생기지만, **툴은 슬래시 명령이 아니다.**
 모델이 판단해서 호출하는 것이라 `/` 목록에 뜨지 않는다.
-`/bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
+`/bb-pr-review:bb-pr-review`처럼 직접 치려면 **스킬**이 필요하다.
+
+**플러그인 명령은 플러그인 이름이 앞에 붙는다** — `/bb-pr-review:bb-review`, `/bb-pr-review:bb-prs`.
+짧은 `/bb-review` 를 그대로 치면 실행되지 않았다(실측). 짧은 이름이 동작하는 것은
+`setup.sh` 6단계에서 **직접 복사**(`~/.claude/skills/`·`~/.claude/commands/`)를 고른 경우뿐이다.
+문서와 명령 안내는 기본 설치 경로인 플러그인 기준의 전체 이름으로 적는다.
 
 ### 서버와 스킬은 별개다 — 순서는 무관
 
@@ -75,7 +80,7 @@ MCP 서버만 등록하면 툴 20개가 생기지만, **툴은 슬래시 명령�
 | | 무엇 | 어디에 |
 |---|---|---|
 | MCP 서버 | 툴 20개 (`bb_pr_get`, `bb_file`, `bb_comment` …) | `~/.claude.json` (user 스코프) |
-| 스킬·명령 | `/bb-pr-review`, `/bb-review`, `/bb-prs`, `/bb-doctor`, `/bb-repos` | 플러그인 캐시 **또는** `~/.claude/skills/` |
+| 스킬·명령 | 플러그인: `/bb-pr-review:bb-review` 등 · 직접 복사(`~/.claude/skills/`): `/bb-review` 등 | 플러그인 캐시 **또는** `~/.claude/skills/` |
 
 가장 짧은 길은 `setup.sh` 하나다. 서버 등록과 플러그인 설치를 6단계로 다 하므로
 **재시작은 한 번이면 된다.** 6단계에서 `claude plugin` 설치와 직접 복사 중 고를 수 있고,
@@ -105,12 +110,12 @@ claude plugin details bb-pr-review@bb-mcp   # Skills (2) 확인
 
 | 명령 | 하는 일 |
 |---|---|
-| `/bb-prs` | 열린 PR 목록만 본다 (**기본은 현재 폴더의 저장소**, `all` 로 전체) |
-| `/bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성. 설명은 저장소 템플릿 우선, 없으면 기본 템플릿 6개 절 |
-| `/bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어). 지적마다 P1/P2/P3/Q 등급과 분류 태그, 머리말 아래 지적 목록 표(번호·분류·위치·요청), 종합 의견에 등급 총계 |
-| `/bb-pr-review` | 위와 같음 (스킬 직접 호출) |
-| `/bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
-| `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
+| `/bb-pr-review:bb-prs` | 열린 PR 목록만 본다 (**기본은 현재 폴더의 저장소**, `all` 로 전체) |
+| `/bb-pr-review:bb-pr-new` | 브랜치 커밋으로 PR 초안을 만들고 확인 후 생성. 설명은 저장소 템플릿 우선, 없으면 기본 템플릿 6개 절 |
+| `/bb-pr-review:bb-review` | PR 리뷰. 인자 없으면 목록부터 고르게 한다. `--ko`·`--en` 으로 출력 언어 지정(기본은 PR 의 언어). 지적마다 P1/P2/P3/Q 등급과 분류 태그, 머리말 아래 지적 목록 표(번호·분류·위치·요청), 종합 의견에 등급 총계 |
+| `/bb-pr-review:bb-pr-review` | 위와 같음 (스킬 직접 호출) |
+| `/bb-pr-review:bb-doctor` | 설정 진단. `quick` 이면 네트워크 없이 |
+| `/bb-pr-review:bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
 
 로컬 저장소에서 개발 중이면 경로를 쓴다. **`.` 은 거부되고 `./` 만 받는다.**
 
@@ -143,7 +148,7 @@ cp plugin/commands/bb-review.md ~/.claude/commands/
 늘어도 따라온다.
 
 **슬래시 명령 이름은 스킬 «디렉터리 이름»에서 나온다** — `~/.claude/skills/bb-pr-review/`
-→ `/bb-pr-review`. frontmatter 의 `name` 은 목록에 보이는 표시 이름일 뿐이다(플러그인
+→ `/bb-pr-review`(직접 복사). 플러그인으로 설치하면 앞에 플러그인 이름이 붙어 `/bb-pr-review:bb-pr-review`. frontmatter 의 `name` 은 목록에 보이는 표시 이름일 뿐이다(플러그인
 스킬에서는 `name` 이 명령의 마지막 마디가 된다). `trigger:` 같은 필드는 없다 —
 Agent Skills 스펙에도 Claude Code 확장 키에도 없어서 **조용히 무시된다.**
 발동은 `description` 이 결정한다.

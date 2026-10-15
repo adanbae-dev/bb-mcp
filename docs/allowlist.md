@@ -164,7 +164,7 @@ bb_allowlist_list()              적용 중인 목록 + 파일과의 차이
 bb_allowlist_add("acme/new")     파일에 한 줄 추가 (게이트 필요)
 ```
 
-`/bb-repos` 와 `/bb-repos add acme/new` 로도 부를 수 있다.
+`/bb-pr-review:bb-repos` 와 `/bb-pr-review:bb-repos add acme/new` 로도 부를 수 있다.
 
 `bb_allowlist_list` 는 **설정이 어떤 상태든 응답한다.** 허용 목록이 없거나(`denied`)
 파일 파싱에 실패해도 오류로 끝내지 않고 `mode`·`warning`·`error`·`fix` 를 돌려준다 —

@@ -1,18 +1,18 @@
 ---
 name: bb-pr-review
-description: "Bitbucket Cloud PR을 bb-mcp 툴로 직접 가져와 리뷰 코멘트를 작성한다. 출력 언어는 PR 의 언어를 따르고 `--ko`·`--en` 으로 지정할 수 있다(기본 한국어 아님 — PR 기준). 로컬 클론·브랜치 fetch가 필요 없다. P1/P2/P3/Q 등급과 6개 분류(버그/보안/성능/품질/테스트/기록) 태그, `path:LINE` 인용, 마지막 '## 종합 의견' 등급 총계·머지 판정을 고정 포맷으로 출력한다. Trigger: /bb-pr-review, 'Bitbucket PR 리뷰', 'PR 번호로 리뷰'."
+description: "Bitbucket Cloud PR을 bb-mcp 툴로 직접 가져와 리뷰 코멘트를 작성한다. 출력 언어는 PR 의 언어를 따르고 `--ko`·`--en` 으로 지정할 수 있다(기본 한국어 아님 — PR 기준). 로컬 클론·브랜치 fetch가 필요 없다. P1/P2/P3/Q 등급과 6개 분류(버그/보안/성능/품질/테스트/기록) 태그, `path:LINE` 인용, 마지막 '## 종합 의견' 등급 총계·머지 판정을 고정 포맷으로 출력한다. Trigger: /bb-pr-review:bb-pr-review, 'Bitbucket PR 리뷰', 'PR 번호로 리뷰'."
 argument-hint: "[workspace/repo] [PR번호] [경로] [--ko|--en]"
 ---
 
-# /bb-pr-review
+# /bb-pr-review:bb-pr-review
 
 Bitbucket Cloud PR을 **bb-mcp 툴로 직접 읽어** 리뷰한다. 산출물은 **그대로 PR에
 붙일 수 있는 마크다운**이다.
 
 ```
-/bb-pr-review                               # 열린 PR을 보여주고 고르게 한다
-/bb-pr-review <ws>/<repo> <PR번호>          # 특정 PR
-/bb-pr-review <ws>/<repo> <PR번호> <path>   # 특정 파일만
+/bb-pr-review:bb-pr-review                               # 열린 PR을 보여주고 고르게 한다
+/bb-pr-review:bb-pr-review <ws>/<repo> <PR번호>          # 특정 PR
+/bb-pr-review:bb-pr-review <ws>/<repo> <PR번호> <path>   # 특정 파일만
 ```
 
 ## 선행조건

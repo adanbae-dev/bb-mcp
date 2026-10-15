@@ -15,7 +15,7 @@ Bitbucket PR은 이 스킬을 쓴다.
 
 ## 무엇이 같고 무엇이 다른가
 
-| | `/pr-review-ko` | `/bb-pr-review` |
+| | `/pr-review-ko` | `/bb-pr-review:bb-pr-review` |
 |---|---|---|
 | 6개 분류·`path:LINE`·`## 종합 의견` | 동일 | 동일 |
 | 심각도 표기 | 분류 이모지 | **P1/P2/P3/Q 등급 + 분류 태그** (0.23.0~) |

@@ -21,7 +21,7 @@
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
 | `plugin/skills/bb-pr-create/` | PR 생성 스킬 (초안 작성 + 중복 검사) |
-| `plugin/commands/` | `/bb-review`, `/bb-prs`, `/bb-pr-new`, `/bb-doctor`, `/bb-repos` |
+| `plugin/commands/` | `/bb-pr-review:bb-review`, `/bb-pr-review:bb-prs`, `/bb-pr-review:bb-pr-new`, `/bb-pr-review:bb-doctor`, `/bb-pr-review:bb-repos` |
 | `scripts/install-pr-template.sh` | PR 템플릿을 저장소 로컬 클론의 `.bitbucket/` 에 복사 (커밋·푸시 안 함) |
 | [`CLAUDE.md`](../CLAUDE.md) | 이 저장소에서 반복해 대가를 치른 작업 규칙 7개 |
 | [`LICENSE`](../LICENSE) | MIT |
@@ -88,7 +88,7 @@ claude plugin update bb-pr-review@bb-mcp
 ## 동작 확인
 
 ```bash
-npm test    # 213개 (2026-10-15) — 파일별 개수는 아래
+npm test    # 214개 (2026-10-15) — 파일별 개수는 아래
 ```
 
 `test` 스크립트는 `node --test test/*.test.mjs` 다. **파일을 나열하지 않는다** —
@@ -107,7 +107,7 @@ npm test    # 213개 (2026-10-15) — 파일별 개수는 아래
   있는지. **원문이 아니라 SHA-256 만 저장한다** — 평문 목록을 두면 그 파일이 곧
   유출원이 되어 검사를 추가하려다 검사 대상을 만드는 셈이다. 걸리면 위치만 알린다
   (CI 로그가 또 하나의 유출 경로다). 토큰 경계에서만 잡는 denylist 라는 한계가 있다
-- `test/docs.test.mjs` (20) — 코드의 툴 이름·파라미터가 docs/usage.md 와, 개수가 README 와 갈렸는지.
+- `test/docs.test.mjs` (21) — 코드의 툴 이름·파라미터가 docs/usage.md 와, 개수가 README 와 갈렸는지.
   PR 템플릿 절이 스킬·명령·README 와 같은지, 리뷰 등급(P1/P2/P3/Q)·분류 태그·지적 목록 표·
   옛 이모지 잔존, 스킬 규격(name·description·500줄), 참조 파일 연결, 게이트 환경변수 실재.
   문서 드리프트는 **틀려도 아무 데서도 안 터지는** 종류라 세 릴리스 연속으로

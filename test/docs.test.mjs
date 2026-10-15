@@ -407,3 +407,41 @@ test("docs/development.md 의 테스트 개수가 실제와 같다", () => {
   const claimed = dev.match(/npm test\s+# (\d+)개/)?.[1];
   assert.equal(Number(claimed), total, `npm test 합계를 ${claimed}개라고 적었다 (실제 ${total})`);
 });
+
+test("문서·명령이 안내하는 슬래시 명령이 실제로 실행되는 이름이다", () => {
+  // 플러그인 명령은 `/<플러그인>:<명령>` 으로만 실행된다. 그런데 명령의 출력 안내
+  // (`→ 리뷰: /bb-review ...`)와 문서가 전부 짧은 이름이었고, 그대로 치면 실행되지
+  // 않았다. 짧은 이름은 setup.sh 의 직접 복사(~/.claude/) 경로에서만 동작한다.
+  const plugin = JSON.parse(read("plugin/.claude-plugin/plugin.json")).name;
+  const names = new Set([
+    ...readdirSync("plugin/commands").map((f) => f.replace(/\.md$/, "")),
+    ...readdirSync("plugin/skills"),
+  ]);
+  const listMd = (d) => readdirSync(d).filter((f) => f.endsWith(".md")).map((f) => `${d}/${f}`);
+  const files = [
+    "README.md", "Settings.md", ".claude-plugin/marketplace.json", "plugin/.claude-plugin/plugin.json",
+    ...listMd("docs"), ...listMd("plugin/commands"),
+    ...readdirSync("plugin/skills").flatMap((n) => {
+      const dir = `plugin/skills/${n}`;
+      return [`${dir}/SKILL.md`, ...(readdirSync(dir).includes("reference") ? listMd(`${dir}/reference`) : [])];
+    }),
+  ];
+  const short = new RegExp(`(?<![\\w./:-])/(${[...names].join("|")})\\b(?!\\.md)`, "g");
+  const full = new RegExp(`/${plugin}:([\\w-]+)`, "g");
+
+  const bad = [];
+  for (const f of files) {
+    read(f).split("\n").forEach((line, i) => {
+      // 직접 복사 경로를 설명하는 줄은 짧은 이름이 맞다. "짧은 이름은 안 된다" 는 설명도 둔다
+      const directCopy = line.includes("~/.claude/") || line.includes("직접 복사") ||
+        line.includes("실행되지 않") || line.includes(", not `");
+      for (const m of line.replace(full, "").matchAll(short)) {
+        if (!directCopy) bad.push(`${f}:${i + 1} /${m[1]}`);
+      }
+      for (const m of line.matchAll(full)) {
+        if (!names.has(m[1])) bad.push(`${f}:${i + 1} /${plugin}:${m[1]} — 없는 명령`);
+      }
+    });
+  }
+  assert.deepEqual(bad, [], `짧은 이름이거나 없는 명령이다 (플러그인 명령은 /${plugin}:<명령>)`);
+});

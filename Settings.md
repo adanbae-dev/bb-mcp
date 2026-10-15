@@ -331,7 +331,7 @@ printf '\nacme/new-repo\n' >> ~/.config/bb-mcp/allowed-repos
 앞의 `\n` 은 파일 마지막 줄에 개행이 없을 때 이전 항목에 붙어버리는 것을 막는다.
 빈 줄은 무시되므로 항상 붙여도 무해하다.
 
-세션 안에서는 `/bb-repos` 로 목록을 보고 `/bb-repos add acme/new-repo` 로
+세션 안에서는 `/bb-pr-review:bb-repos` 로 목록을 보고 `/bb-pr-review:bb-repos add acme/new-repo` 로
 추가할 수 있다(후자는 `BITBUCKET_ALLOW_ALLOWLIST_WRITE=true` 필요).
 어느 쪽이든 **반영에는 세션 재시작이 필요하다.** 편집은 쉽고 반영에는 재시작이 필요한 이 조합이
 경계의 실체다 — 에이전트가 파일을 고쳐도 그 세션에서는 쓸 수 없다.
@@ -388,7 +388,7 @@ MCP 서버가 어느 cwd에서 뜰지 보장되지 않는다. (`~/`는 서버가
 
 ### 스킬도 같이
 
-MCP 툴은 슬래시 명령이 아니다. `/bb-pr-review` 를 쓰려면 스킬을 설치한다.
+MCP 툴은 슬래시 명령이 아니다. `/bb-pr-review:bb-pr-review` 를 쓰려면 스킬을 설치한다.
 
 ```bash
 claude plugin marketplace add adanbae-dev/bb-mcp
@@ -410,11 +410,11 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 
 | 명령 | 하는 일 |
 |---|---|
-| `/bb-prs` | 열린 PR 목록만 (리뷰 시작 안 함) |
-| `/bb-pr-new` | PR 초안 작성 + 확인 후 생성 (`ALLOW_PR_CREATE` 필요) |
-| `/bb-review` | PR 리뷰 (인자 없으면 목록부터). `--ko`·`--en` 로 출력 언어 지정 |
-| `/bb-doctor` | 설정 진단 (`quick` 이면 네트워크 없이) |
-| `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
+| `/bb-pr-review:bb-prs` | 열린 PR 목록만 (리뷰 시작 안 함) |
+| `/bb-pr-review:bb-pr-new` | PR 초안 작성 + 확인 후 생성 (`ALLOW_PR_CREATE` 필요) |
+| `/bb-pr-review:bb-review` | PR 리뷰 (인자 없으면 목록부터). `--ko`·`--en` 로 출력 언어 지정 |
+| `/bb-pr-review:bb-doctor` | 설정 진단 (`quick` 이면 네트워크 없이) |
+| `/bb-pr-review:bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
 
 다섯 명령 모두 **결과를 마크다운 표로** 낸다. 툴이 돌려주는 JSON을 그대로
 붙이지 않는다. 형식 규칙은 [docs/usage.md](./docs/usage.md) 「결과는 마크다운 표로 낸다」.
@@ -496,11 +496,12 @@ allowlist가 깨져 있어도 동작하므로, 그 상황에서도 원인을 알
 | 429 Too Many Requests | Bitbucket rate limit | 자동 재시도(기본 2회). 계속 나면 `BITBUCKET_RETRY_MAX` 상향 |
 | `허용되지 않은 저장소` 인데 파일엔 있음 | 기동 후 파일을 고쳤다 | `bb_allowlist_list` 로 `pending_add` 확인 → 세션 재시작 |
 | `허용 저장소가 설정되지 않아` | allowlist 미설정(`denied`) | 파일을 만들고 `_FILE` 을 등록. 제한 없이 쓰려면 `BITBUCKET_ALLOW_ALL_REPOS=true` |
-| 상태를 모르겠다 | — | `/bb-repos` 는 `denied`·파싱 실패에서도 응답한다. `mode`·`fix` 를 본다 |
+| 상태를 모르겠다 | — | `/bb-pr-review:bb-repos` 는 `denied`·파싱 실패에서도 응답한다. `mode`·`fix` 를 본다 |
 | 원인을 모르겠다 | — | `bb_doctor` 먼저. 그다음 `BITBUCKET_DEBUG=true`로 재등록 후 MCP 로그 |
 | MCP 연결만 실패하고 이유가 없음 | 설정 오류 | 서버가 stderr에 원인을 남기고 exit 1 한다. 로그를 본다 |
 | `CONNECTION_CLOSED` | 프로젝트 `.mcp.json` 이 user 스코프를 덮어씀 | 저장소 루트의 `.mcp.json` 을 지운다 (§7) |
-| `/bb-pr-review` 가 `/` 목록에 없음 | 스킬 미설치 | `claude plugin list` 확인. `~/.claude/skills/` 에 있어야 로드된다 |
+| `/bb-pr-review:bb-pr-review` 가 `/` 목록에 없음 | 스킬 미설치 | `claude plugin list` 확인. 직접 복사라면 `~/.claude/skills/` 에 있어야 로드되고 이름은 `/bb-pr-review` |
+| 짧은 `/bb-review` 가 실행되지 않음 | 플러그인 명령은 `플러그인이름:명령` | `/bb-pr-review:bb-review` 로 친다 |
 | `plugin update` 가 `already at the latest version` | 버전을 안 올렸다 | 세 곳을 맞춘다. `npm test` 가 검사한다 |
 | 버전을 올렸는데도 옛 코드 | 마켓플레이스 캐시 | `claude plugin marketplace update bb-mcp` 먼저 |
 | 툴은 다 되는데 슬래시 명령이 없음 | **정상** | MCP 툴은 슬래시 명령이 아니다. 스킬이 별개다 |
@@ -557,7 +558,7 @@ stderr(= Claude Code의 MCP 로그)에 요청·상태·소요시간·재시도�
 bb_doctor()                             설정 점검 (처음 한 번, 그리고 막힐 때)
 bb_detect_repo()                        현재 폴더가 어느 저장소인가 (묻기 전에 먼저)
 bb_pr_inbox()                           어디에 뭐가 열려 있나 (allowlist 전체)
-                                        — 슬래시로는 /bb-prs
+                                        — 슬래시로는 /bb-pr-review:bb-prs
 bb_pr_commits(repo, id)                 커밋 위생
 bb_pr_activity(repo, id)                승인·리뷰 후 푸시가 있었나
 bb_pr_get(repo, id)                     의도·범위 파악 → source_commit 확보

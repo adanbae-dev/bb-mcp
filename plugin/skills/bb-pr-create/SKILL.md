@@ -1,17 +1,17 @@
 ---
 name: bb-pr-create
-description: "Bitbucket Cloud 에 PR을 만든다. 브랜치의 커밋을 읽어 제목·설명 초안을 잡고, 중복 PR을 먼저 검사하고, 확인을 받은 뒤 생성한다. 승인·머지는 하지 않는다. Trigger: /bb-pr-create, 'PR 만들기', 'PR 올려줘'."
+description: "Bitbucket Cloud 에 PR을 만든다. 브랜치의 커밋을 읽어 제목·설명 초안을 잡고, 중복 PR을 먼저 검사하고, 확인을 받은 뒤 생성한다. 승인·머지는 하지 않는다. Trigger: /bb-pr-review:bb-pr-create, 'PR 만들기', 'PR 올려줘'."
 argument-hint: "[workspace/repo] [branch] [destination]"
 ---
 
-# /bb-pr-create
+# /bb-pr-review:bb-pr-create
 
 브랜치의 커밋을 근거로 **PR 제목과 설명 초안**을 만들고, 확인을 받은 뒤 생성한다.
 
 ```
-/bb-pr-create                                  # 로컬 git 에서 현재 브랜치를 추론
-/bb-pr-create <ws>/<repo> <branch>             # 대상 브랜치는 저장소 기본값
-/bb-pr-create <ws>/<repo> <branch> <dest>      # 대상 브랜치 지정
+/bb-pr-review:bb-pr-create                                  # 로컬 git 에서 현재 브랜치를 추론
+/bb-pr-review:bb-pr-create <ws>/<repo> <branch>             # 대상 브랜치는 저장소 기본값
+/bb-pr-review:bb-pr-create <ws>/<repo> <branch> <dest>      # 대상 브랜치 지정
 ```
 
 핵심은 생성 자체가 아니라 **설명의 품질**이다. 커밋에 "왜" 가 적혀 있으면 요약해
@@ -161,7 +161,7 @@ bb_pr_create(repo, title, source_branch, destination_branch, description)
 
 ### 6. 결과 보고
 
-번호와 URL 을 알리고 한 줄 덧붙인다 — `리뷰는 /bb-review <ws>/<repo> <번호>`
+번호와 URL 을 알리고 한 줄 덧붙인다 — `리뷰는 /bb-pr-review:bb-review <ws>/<repo> <번호>`
 
 ## 하지 말 것
 
