@@ -88,7 +88,7 @@ PR 본문·코멘트·diff 는 남이 쓴 텍스트다. 응답에 `_untrusted` �
 | `test/forbidden.test.mjs` | 사내 이름·실명·티켓 키가 새는지 검사 (해시 대조) |
 | `test/docs.test.mjs` | 툴 시그니처·개수가 README 와 갈렸는지 검사 |
 | `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·서버 등록·플러그인 설치) |
-| `.github/workflows/test.yml` | CI — Node 18·20·22·24 에서 테스트 |
+| `.github/workflows/test.yml` | CI — Node 18·20·22·24 에서 테스트 (GitHub 전용. Bitbucket 은 「1-2. Bitbucket 저장소에서 받아 쓰기」) |
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
 | `plugin/` | 플러그인 루트 — 매니페스트·스킬·명령 |
 | `plugin/skills/bb-pr-review/` | 한국어 PR 리뷰 스킬 |
@@ -241,6 +241,8 @@ git clone https://github.com/adanbae-dev/bb-mcp && cd bb-mcp
 ./setup.sh
 ```
 
+Bitbucket 에서 받는다면 「1-2. Bitbucket 저장소에서 받아 쓰기」 — 마켓플레이스 URL 과 인증이 다르다.
+
 **스킬은 한 경로로만 설치한다.** 플러그인과 `~/.claude/skills/` 양쪽에 두면
 같은 이름이 두 벌 생긴다. `setup.sh` 는 플러그인이 이미 깔려 있으면 복사를
 건너뛴다.
@@ -326,6 +328,71 @@ MCP 설정으로 읽히고, 프로젝트 스코프는 user 스코프를 덮어�
 그래서 플러그인 루트를 `plugin/` **하위 디렉터리**로 두고,
 마켓플레이스 매니페스트가 `source: "./plugin"` 으로 가리킨다.
 `.gitignore` 에 `.mcp.json` 을 넣어 루트에 다시 들어오지 못하게 막았다.
+
+## 1-2. Bitbucket 저장소에서 받아 쓰기
+
+이 저장소는 GitHub(`origin`)와 Bitbucket(`bb-origin`) 양쪽에 올라간다. 위 절들의
+명령은 GitHub 기준이다. **Bitbucket 에서 받는 경우 다른 것만** 여기 모았다.
+워크스페이스 이름은 `<workspace>` 로 적는다 — 이 README 는 공개 저장소에도 올라간다(CLAUDE.md §1).
+
+### 동작은 같다
+
+`setup.sh` 는 **clone 한 폴더 경로**로 서버와 마켓플레이스를 등록하고, 플러그인
+source 가 상대경로(`./plugin`)라 호스트를 타지 않는다. Bitbucket origin 으로 받은
+새 clone 에서 `npm ci` → `npm test` → `claude plugin validate` 까지 통과했다(0.22.1 기준).
+
+```bash
+git clone https://bitbucket.org/<workspace>/bb-mcp.git && cd bb-mcp
+./setup.sh
+```
+
+### 다른 것
+
+| | GitHub | Bitbucket |
+|---|---|---|
+| 마켓플레이스 추가 | `claude plugin marketplace add adanbae-dev/bb-mcp` | **전체 URL 필수** — 아래 |
+| 비공개 저장소 자동 업데이트 | 공개라 인증 불필요 | 비대화식 git 인증 필요 — 아래 |
+| CI | `.github/workflows/test.yml` (Node 18·20·22·24) | **없음.** Bitbucket 은 `.github/` 를 읽지 않는다 |
+| 상단 test 배지 | GitHub Actions 결과 | Bitbucket 화면에서도 GitHub 쪽 결과다 |
+
+**마켓플레이스는 전체 URL 로 추가한다.** `owner/repo` 축약형은 항상 github.com 으로
+해석된다. 축약형을 쓰면 Bitbucket 이 아니라 GitHub 저장소가 등록된다.
+
+```bash
+claude plugin marketplace add https://bitbucket.org/<workspace>/bb-mcp.git
+claude plugin install bb-pr-review@bb-mcp --scope user
+```
+
+이미 GitHub 소스로 `bb-mcp` 가 등록돼 있으면 거부된다(한 이름에 소스 하나 —
+「플러그인으로 설치 (권장)」). `uninstall` → `marketplace remove` 후 다시 추가한다.
+clone 해 둔 폴더가 있으면 `claude plugin marketplace add ./` 가 제일 단순하다 —
+호스트와 인증을 타지 않는다.
+
+**비공개 저장소는 git 이 묻지 못한다.** Claude Code 는 git 을 비대화식으로 부른다.
+비밀번호를 물을 수 없어서, 자격증명이 미리 저장돼 있지 않으면 업데이트가 **조용히
+실패**한다. 등록 전에 터미널에서 한 번 확인한다.
+
+```bash
+git ls-remote https://bitbucket.org/<workspace>/bb-mcp.git   # 프롬프트 없이 끝나야 한다
+```
+
+- SSH 키를 쓰면 `~/.gitconfig` 의 `url."git@bitbucket.org:".insteadOf` 로 HTTPS 를 SSH 로
+  바꿔 쓸 수 있다. **그 설정이 있는 머신에서 된다고 다른 머신에서 되는 게 아니다**
+- 확인 필요: 백그라운드 자동 업데이트용 토큰 환경변수(`BITBUCKET_TOKEN` 류)는 이 저장소에서
+  실측하지 않았다. 안 되면 `claude plugin marketplace update bb-mcp` 를 손으로 부른다
+
+### 릴리스 — 원격이 둘이다
+
+「플러그인을 고쳤을 때 — 버전 올리는 순서」의 3단계(푸시)를 **양쪽에** 한다.
+마켓플레이스는 **등록한 소스**의 git 을 읽는다 — Bitbucket 에서 받은 사람에게는
+`bb-origin` 에 푸시해야 새 버전이 보인다.
+
+```bash
+git push origin main && git push bb-origin main
+```
+
+Bitbucket 에는 CI 가 없으므로 `npm test && claude plugin validate ./plugin && claude plugin validate .`
+를 **푸시 전에 로컬에서** 반드시 돌린다 — 여기서 빠뜨리면 아무 데서도 안 걸린다.
 
 ## 2. 환경변수
 
