@@ -12,7 +12,7 @@ Atlassian 커넥터에 Jira·Confluence만 보이고 Bitbucket 툴이 없는 이
 ./setup.sh
 ```
 
-6단계로 3~7장과 스킬 설치를 대신한다. 비밀 저장소 감지, 토큰 저장(128자 절단·
+6단계로 3~7장과 스킬 설치를 대신한다(7단계는 선택 — 팀 저장소에 PR 템플릿 복사). 비밀 저장소 감지, 토큰 저장(128자 절단·
 개행→hex 회피), allowlist 파일 생성, `claude mcp add` 명령 조립,
 `~/.claude/skills/` 에 리뷰 스킬 설치까지 처리한다.
 끝나면 세션을 재시작하고 `bb_doctor` 를 부른다.
@@ -247,7 +247,7 @@ mkdir -p ~/tools/bb-mcp && cd ~/tools/bb-mcp
 npm init -y && npm pkg set type=module
 npm i @modelcontextprotocol/sdk@1 zod@3
 # server.mjs, lib.mjs, test/ 를 이 폴더에 저장
-npm test   # 191개 통과 확인
+npm test   # 전부 통과 확인 (파일별 개수는 docs/development.md)
 ```
 
 Node 18+ 필요(전역 `fetch`, `AbortSignal.timeout`).

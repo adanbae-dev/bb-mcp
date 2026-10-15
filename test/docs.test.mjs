@@ -389,3 +389,21 @@ test("참조 파일을 '읽으라'고 지시한다 — 가리키기만 하지 �
     assert.ok(/읽는다|읽고/.test(ctx), `reference/${f} 를 '읽으라'는 지시가 없다: ${around.slice(0, 60)}`);
   }
 });
+
+test("docs/development.md 의 테스트 개수가 실제와 같다", () => {
+  // `npm test # 191개` 가 212개가 될 때까지 세 곳에 남아 있었다. 숫자는 테스트를
+  // 추가할 때마다 조용히 낡는다 — 개수를 적는 곳을 한 파일로 모으고 여기서 센다.
+  const dev = read("docs/development.md");
+  const files = readdirSync("test").filter((f) => f.endsWith(".test.mjs"));
+  const count = (f) => (read(`test/${f}`).match(/^\s*test\(/gm) ?? []).length;
+
+  let total = 0;
+  for (const f of files) {
+    const said = dev.match(new RegExp("^- `test/" + f.replace(/\./g, "\\.") + "` \\((\\d+)\\)", "m"))?.[1];
+    assert.ok(said, `docs/development.md 목록에 test/${f} 가 없다`);
+    assert.equal(Number(said), count(f), `test/${f} 를 ${said}개라고 적었다 (실제 ${count(f)})`);
+    total += count(f);
+  }
+  const claimed = dev.match(/npm test\s+# (\d+)개/)?.[1];
+  assert.equal(Number(claimed), total, `npm test 합계를 ${claimed}개라고 적었다 (실제 ${total})`);
+});

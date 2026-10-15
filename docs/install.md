@@ -26,7 +26,7 @@
 
 ```bash
 npm i @modelcontextprotocol/sdk@1 zod@3
-npm test                                              # 191개
+npm test                                              # 전부 통과해야 한다 (파일별 개수는 docs/development.md)
 
 # 토큰 (-w 뒤에 값을 직접. 대화형 프롬프트는 128자에서 잘린다)
 security add-generic-password -U -s bb-api-token -a "$USER" -w '<TOKEN>'

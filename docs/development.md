@@ -12,7 +12,9 @@
 | `test/lib.test.mjs` | 단위 테스트 |
 | `test/integration.test.mjs` | 가짜 Bitbucket API + 실제 MCP 클라이언트 |
 | `test/forbidden.test.mjs` | 사내 이름·실명·티켓 키가 새는지 검사 (해시 대조) |
-| `test/docs.test.mjs` | 툴 시그니처가 docs/usage.md 와, 개수가 README 와 갈렸는지 검사 |
+| `test/docs.test.mjs` | 문서가 코드·스킬과 갈렸는지 검사 (툴 시그니처·개수, 템플릿 절, 리뷰 등급·태그 등) |
+| `test/manifest.test.mjs` | 버전 세 곳 일치, 마켓플레이스·플러그인 매니페스트 |
+| `test/template-install.test.mjs` | `scripts/install-pr-template.sh` — 실제 git 저장소로 복사·건너뜀·덮어쓰기 거부 |
 | `setup.sh` | 대화형 설정 도우미 (키체인·allowlist·서버 등록·플러그인 설치) |
 | `.github/workflows/test.yml` | CI — Node 18·20·22·24 에서 테스트 (GitHub 전용. Bitbucket 은 「1-2. Bitbucket 저장소에서 받아 쓰기」) |
 | `.claude-plugin/marketplace.json` | 마켓플레이스 매니페스트 (`source: "./plugin"`) |
@@ -86,7 +88,7 @@ claude plugin update bb-pr-review@bb-mcp
 ## 동작 확인
 
 ```bash
-npm test    # 191개
+npm test    # 213개 (2026-10-15) — 파일별 개수는 아래
 ```
 
 `test` 스크립트는 `node --test test/*.test.mjs` 다. **파일을 나열하지 않는다** —
@@ -105,12 +107,17 @@ npm test    # 191개
   있는지. **원문이 아니라 SHA-256 만 저장한다** — 평문 목록을 두면 그 파일이 곧
   유출원이 되어 검사를 추가하려다 검사 대상을 만드는 셈이다. 걸리면 위치만 알린다
   (CI 로그가 또 하나의 유출 경로다). 토큰 경계에서만 잡는 denylist 라는 한계가 있다
-- `test/docs.test.mjs` (3) — 코드의 툴 이름·파라미터가 docs/usage.md 와, 개수가 README 와 갈렸는지.
+- `test/docs.test.mjs` (20) — 코드의 툴 이름·파라미터가 docs/usage.md 와, 개수가 README 와 갈렸는지.
+  PR 템플릿 절이 스킬·명령·README 와 같은지, 리뷰 등급(P1/P2/P3/Q)·분류 태그·지적 목록 표·
+  옛 이모지 잔존, 스킬 규격(name·description·500줄), 참조 파일 연결, 게이트 환경변수 실재.
   문서 드리프트는 **틀려도 아무 데서도 안 터지는** 종류라 세 릴리스 연속으로
   "확인했다" 뒤에 누락이 더 나왔다. 이름과 파라미터 **존재**만 본다 —
   설명 문장의 정확성은 기계로 볼 수 없다
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
+- `test/template-install.test.mjs` (5) — PR 템플릿 설치 스크립트를 실제 `git init` 저장소로.
+  하위 폴더 → 루트, remote 이름 무관, Bitbucket 아니면 건너뜀, 비대화형이면 기존 템플릿을
+  덮어쓰지 않음, git 저장소가 아니면 실패 코드, setup.sh 가 묻고 나서만 설치
 - `test/integration.test.mjs` (92) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를
   붙여 툴 등록, 페이지네이션 추적, 게이트 동작, 저장소 차단, allowlist 파일의
   스냅샷/재읽기·fail-closed, 인박스 오류 격리, 429/5xx 재시도와 **쓰기 비재시도**,
