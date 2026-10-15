@@ -10,9 +10,11 @@ Rovo MCP Server를 거치지 않으므로 조직 관리자의 API 토큰 인증 
 **Review Bitbucket Cloud pull requests from Claude Code — without cloning the repo.**
 An MCP server (20 tools) plus a Claude Code plugin (5 slash commands, 2 skills).
 
-Atlassian's Rovo MCP Server does not cover Bitbucket, and `gh`-style tooling does not
-exist for Bitbucket Cloud. This fills that gap: give it a PR number and it fetches the
-diff, commits, file history and existing comments through the REST API.
+Atlassian's Rovo MCP Server has covered Bitbucket Cloud since April 2026, but only when an
+organization admin enables API token auth and the workspace is linked to the org — and it
+ships approve and merge tools. This server needs neither: a personal scoped token is
+enough. Give it a PR number and it fetches the diff, commits, file history and existing
+comments through the REST API.
 
 ```
 /bb-pr-review:bb-prs                     open PRs (auto-detects the repo of the current folder)
@@ -62,6 +64,9 @@ Claude Code 에서 **Bitbucket Cloud PR 을 클론 없이 읽고 리뷰한다.**
 - **기본이 차단이다.** 허용 저장소를 지정하지 않으면 아무 저장소에도 접근하지 않고,
   쓰기는 게이트 5개를 각각 켜야 한다
 - PR 본문·코멘트·diff 는 남이 쓴 텍스트다. `_untrusted` 표시를 붙이지만 **강제력은 없다**
+- **공식 Rovo MCP Server 도 2026-04 부터 Bitbucket Cloud 를 지원한다.** 다만 조직 관리자가
+  API 토큰 인증을 켜고 워크스페이스를 조직에 연결해야 하며, 승인·머지 툴이 들어 있다.
+  이 서버는 개인 토큰만으로 동작하고 승인·머지를 뺐다 — 차이는 [Settings.md](./Settings.md) 「1. 왜 Bitbucket 툴이 안 보이는가」
 
 ## 문서 안내
 
