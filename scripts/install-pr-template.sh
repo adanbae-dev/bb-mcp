@@ -36,6 +36,10 @@ for arg in "$@"; do
   fi
 
   dst="$top/$REL"
+  # 링크를 따라가면 저장소 밖 파일을 덮어쓴다 — 남의 저장소라 내용을 믿지 않는다
+  if [ -L "$top/.bitbucket" ] || [ -L "$dst" ]; then
+    fail "$top — .bitbucket 또는 템플릿이 심볼릭 링크라 쓰지 않습니다"; N_FAIL=$((N_FAIL + 1)); continue
+  fi
   if [ -f "$dst" ]; then
     if cmp -s "$SRC" "$dst"; then
       ok "$top — 이미 같은 템플릿입니다"; N_SAME=$((N_SAME + 1)); continue

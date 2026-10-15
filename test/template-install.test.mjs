@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +62,25 @@ test("다른 템플릿이 있으면 대화형이 아닐 때 덮어쓰지 않는�
     assert.match(r.stdout, /덮어쓰지 않습니다/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("템플릿 자리가 심볼릭 링크면 따라가지 않고 실패한다", () => {
+  // 링크를 따라 cp 하면 저장소 밖 파일이 덮어써진다
+  const dir = repo("git@bitbucket.org:acme/web-app.git");
+  const outside = mkdtempSync(join(tmpdir(), "bb-tpl-out-"));
+  try {
+    const victim = join(outside, "victim.txt");
+    writeFileSync(victim, "keep\n");
+    mkdirSync(join(dir, ".bitbucket"));
+    symlinkSync(victim, join(dir, REL));
+    const r = run(dir);
+    assert.notEqual(r.status, 0);
+    assert.equal(readFileSync(victim, "utf8"), "keep\n");
+    assert.match(r.stderr, /심볼릭 링크/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 

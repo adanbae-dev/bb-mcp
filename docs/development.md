@@ -88,7 +88,7 @@ claude plugin update bb-pr-review@bb-mcp
 ## 동작 확인
 
 ```bash
-npm test    # 214개 (2026-10-15) — 파일별 개수는 아래
+npm test    # 215개 (2026-10-15) — 파일별 개수는 아래
 ```
 
 `test` 스크립트는 `node --test test/*.test.mjs` 다. **파일을 나열하지 않는다** —
@@ -115,7 +115,7 @@ npm test    # 214개 (2026-10-15) — 파일별 개수는 아래
   설명 문장의 정확성은 기계로 볼 수 없다
 - `test/manifest.test.mjs` (4) — 버전 세 곳 일치, 마켓플레이스 경로,
   플러그인이 MCP 서버를 선언하지 않음, 스킬·명령 경로
-- `test/template-install.test.mjs` (5) — PR 템플릿 설치 스크립트를 실제 `git init` 저장소로.
+- `test/template-install.test.mjs` (6) — PR 템플릿 설치 스크립트를 실제 `git init` 저장소로.
   하위 폴더 → 루트, remote 이름 무관, Bitbucket 아니면 건너뜀, 비대화형이면 기존 템플릿을
   덮어쓰지 않음, git 저장소가 아니면 실패 코드, setup.sh 가 묻고 나서만 설치
 - `test/integration.test.mjs` (92) — 로컬 가짜 Bitbucket API에 실제 MCP 클라이언트를

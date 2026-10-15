@@ -939,9 +939,9 @@ test("parseBitbucketRemote 는 bitbucket 이 아니면 null", () => {
 test("findBitbucketRemote 는 remote 이름을 가정하지 않는다", () => {
   // 실측: remote 4개 중 GitHub 3 + Bitbucket 1, bitbucket 쪽 이름이 origin 이었다
   const real = [
-    "github-origin\tgit@github.com:duse-corp/x.git (fetch)",
-    "github-origin\tgit@github.com:duse-corp/x.git (push)",
-    "old\tgit@github.com:duse-corp/y.git (fetch)",
+    "github-origin\tgit@github.com:acme/x.git (fetch)",
+    "github-origin\tgit@github.com:acme/x.git (push)",
+    "old\tgit@github.com:acme/y.git (fetch)",
     "origin\tgit@bitbucket.org:acme/web-app.git (fetch)",
     "origin\tgit@bitbucket.org:acme/web-app.git (push)",
   ].join("\n");
