@@ -21,6 +21,7 @@ Bitbucket PR은 이 스킬을 쓴다.
 | 심각도 표기 | 분류 이모지 | **P1/P2/P3/Q 등급 + 분류 태그** (0.23.0~) |
 | 최상위 등급 조건(도입 + 도달 둘 다) | 동일 | 동일 |
 | 사람 리뷰 필요 영역 · 등급 총계 | 없음 | **있음** |
+| 지적 목록 표 (번호·분류·위치·요청) | 없음 | **있음** (0.24.0~) |
 | 읽기 전용 기본 | 동일 | 동일 |
 | diff 확보 | `git diff base...head` | `bb_pr_files` → `bb_pr_diff(path)` |
 | 라인 검증 | `git show head:path \| cat -n` | `bb_file(ref=source_commit, start, end)` |

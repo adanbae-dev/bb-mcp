@@ -13,5 +13,7 @@
 | 미해결 P1 없음 — 머지 가능. P2·P3 는 후속 처리 가능 | No unresolved P1 — ready to merge. P2/P3 can follow up |
 | `[버그]`·`[보안]`·`[성능]`·`[품질]`·`[테스트]`·`[기록]` | `[Bug]` · `[Security]` · `[Performance]` · `[Quality]` · `[Tests]` · `[Records]` |
 | 「사람 리뷰 필요 영역」 | `Human review needed` |
+| 「지적 목록」 표 머리 `#` · `분류` · `위치` · `요청` | `#` · `Category` · `Location` · `Request` |
+| 위치 칸의 `PR 설명` | `PR description` |
 | 「이 리뷰가 확인하지 못한 것」 | `What this review could not verify` |
 | 「이전 리뷰 처리」 | `Previous review` |

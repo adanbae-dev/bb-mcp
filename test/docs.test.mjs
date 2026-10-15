@@ -218,6 +218,37 @@ test("리뷰 등급이 P1/P2/P3/Q 이고 옛 이모지 체계가 남아 있지 �
   }
 });
 
+test("리뷰 머리에 지적 목록 표가 있고 분류가 태그 목록과 같다", () => {
+  // 0.23.0 은 분류가 각 지적 제목 안에만 있어서 끝까지 읽어야 구성이 보였다.
+  // 표 예시가 규칙을 이긴다(CLAUDE.md §4) — 예시의 분류·번호가 틀리면 그대로 출력된다.
+  const skill = read("plugin/skills/bb-pr-review/SKILL.md");
+  assert.ok(skill.includes("### 지적 목록 — 머리말 바로 아래"), "지적 목록 절이 없다");
+  assert.ok(skill.includes("| 「지적 목록」 표"), "분량 표에 지적 목록 행이 없다");
+
+  const head = "| # | 분류 | 위치 | 요청 |";
+  const at = skill.indexOf(head);
+  assert.ok(at >= 0, "지적 목록 표 머리가 없다");
+  const rows = skill.slice(at).split("\n").slice(2).filter((l) => l.startsWith("| "));
+  assert.ok(rows.length >= 3, `지적 목록 예시가 ${rows.length}행 — 여러 등급·분류를 보여야 한다`);
+
+  const tags = [...skill.matchAll(/^\d+\. `\[([^\]]+)\]` — /gm)].map((m) => m[1]);
+  for (const r of rows) {
+    const [, no, tag] = r.split("|").map((c) => c.trim());
+    assert.match(no, /^(P[123]|Q)-\d+$/, `예시 번호 '${no}' 가 본문 번호 규약과 다르다`);
+    assert.ok(tags.includes(tag.replace(/^\[|\]$/g, "")), `예시 분류 '${tag}' 가 태그 목록에 없다`);
+  }
+
+  const english = read("plugin/skills/bb-pr-review/reference/english.md");
+  for (const w of ["`Category`", "`Location`", "`Request`"]) {
+    assert.ok(english.includes(w), `english.md 에 지적 목록 표 머리 ${w} 가 없다`);
+  }
+  // 재리뷰에서 이전 지적까지 넣으면 상태가 「이전 리뷰 처리」 와 두 곳으로 갈린다
+  assert.ok(
+    read("plugin/skills/bb-pr-review/reference/re-review.md").includes("「지적 목록」"),
+    "re-review.md 가 지적 목록 표를 어떻게 쓰는지 말하지 않는다",
+  );
+});
+
 test("재리뷰 규약이 참조 파일에 있고 스킬·명령이 가리킨다", () => {
   // 실물 재리뷰에서 「이전 리뷰 처리」 표를 즉석에서 만들었다. 고정 포맷이
   // 값인데 즉흥이 들어간 것이라 규약으로 옮겼다.
