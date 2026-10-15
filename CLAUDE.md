@@ -1,7 +1,7 @@
 # bb-mcp — 작업 규칙
 
 Bitbucket Cloud PR을 읽고 리뷰 코멘트를 쓰는 개인용 MCP 서버.
-설계 근거는 [README.md](./README.md), 무엇을 왜 틀렸는지는 [CHANGELOG.md](./CHANGELOG.md).
+설계 근거는 [README.md](./README.md) 와 [docs/](./docs/), 무엇을 왜 틀렸는지는 [CHANGELOG.md](./CHANGELOG.md).
 
 아래는 **이 저장소에서 반복해서 대가를 치른 것들**이다. 일반적인 모범 사례가 아니라
 여기서 실제로 깨진 것만 적는다.
@@ -21,7 +21,7 @@ Bitbucket Cloud PR을 읽고 리뷰 코멘트를 쓰는 개인용 MCP 서버.
 
 **현재 트리만 검사한다.** 히스토리는 보지 않는다. 0.18.0 이전 커밋에 남아 있던
 사내 이름은 2026-09-08 에 `git filter-repo` 로 제거했다(경위는
-[README.md §7 잔존 위험 ⑩](./README.md)). 그래도 이 테스트는 **앞으로만** 막는다 —
+[docs/security.md](./docs/security.md) 「막지 못하는 것」 ⑩). 그래도 이 테스트는 **앞으로만** 막는다 —
 새로 넣지 않는 것이 유일한 방어이고, 다시 넣으면 또 재작성해야 한다.
 
 **한 번 정리하면 끝나는 문제가 아니다.** 새 예시를 쓸 때 손에 잡히는 데이터는 늘
@@ -55,7 +55,7 @@ Bitbucket Cloud PR을 읽고 리뷰 코멘트를 쓰는 개인용 MCP 서버.
 규칙 문장과 예시가 어긋나면 예시대로 동작한다. 규약을 고칠 때 **예시 표·코드블록을
 같이 고친다.** 같은 규칙이 여러 파일에 있으면 전부 찾는다 —
 표 규약은 `plugin/commands/bb-prs.md` · `plugin/skills/bb-pr-review/SKILL.md` ·
-`README.md` 세 곳에 있다.
+`docs/usage.md` 세 곳에 있다.
 
 ## 5. 조용한 실패를 남기지 않는다
 
@@ -87,7 +87,7 @@ Bitbucket Cloud PR을 읽고 리뷰 코멘트를 쓰는 개인용 MCP 서버.
 ## 7. 릴리스
 
 버전이 **세 곳**에 있고 전부 맞아야 한다. 순서와 이유는
-[README.md §1-1](./README.md) — 푸시가 `marketplace update` 보다 먼저다.
+[docs/development.md](./docs/development.md) 「플러그인 릴리스」 — 푸시가 `marketplace update` 보다 먼저다.
 
 ```bash
 npm test && claude plugin validate ./plugin && claude plugin validate .

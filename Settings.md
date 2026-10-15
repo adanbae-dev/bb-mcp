@@ -3,7 +3,7 @@
 Atlassian 커넥터에 Jira·Confluence만 보이고 Bitbucket 툴이 없는 이유부터,
 개인이 직접 MCP 서버를 만들어 등록하고 PR 리뷰에 쓰기까지의 전체 정리.
 
-서버 자체의 툴 레퍼런스와 경계 설계는 [README.md](./README.md)에 있다.
+서버 자체의 툴 레퍼런스는 [docs/usage.md](./docs/usage.md), 경계 설계는 [docs/design.md](./docs/design.md)·[docs/security.md](./docs/security.md)에 있다.
 이 문서는 **설정 절차와 트러블슈팅**을 다룬다.
 
 ## 0. 빠른 길
@@ -86,7 +86,7 @@ OAuth로 Bitbucket을 지원하는 작업은 로드맵에 있다고 안내되어
 토큰 형태(길이·hex 여부)를 반드시 확인한다.
 
 **평문 경로는 토큰이 `~/.claude.json` 에 상주한다.** 설정 파일을 읽을 수 있는
-주체는 토큰을 그대로 얻는다(README §7 ⑨).
+주체는 토큰을 그대로 얻는다([docs/security.md](./docs/security.md) 「막지 못하는 것」 ⑨).
 
 ### Node
 
@@ -319,7 +319,7 @@ LIST
 - 형식이 틀린 줄(`/acme/repo`처럼 앞 슬래시 등)은 줄 번호와 함께 거부된다
 - `BITBUCKET_ALLOWED_REPOS`(env)를 같이 설정하면 **env가 이긴다.** 파일을 쓸 거면 env는 빼둔다
 
-자세한 동작은 [README.md §4](./README.md)에.
+자세한 동작은 [docs/allowlist.md](./docs/allowlist.md)에.
 
 **목록은 기동 시 한 번 읽는다.** 저장소를 추가하려면 파일에 한 줄 넣고
 세션을 재시작한다.
@@ -337,7 +337,7 @@ printf '\nacme/new-repo\n' >> ~/.config/bb-mcp/allowed-repos
 경계의 실체다 — 에이전트가 파일을 고쳐도 그 세션에서는 쓸 수 없다.
 
 `BITBUCKET_ALLOWLIST_RELOAD=true` 로 켜면 재시작 없이 반영되지만
-그 장벽이 사라진다. [README.md §7 ②](./README.md) 참고.
+그 장벽이 사라진다. [docs/security.md](./docs/security.md) 「막지 못하는 것」 ② 참고.
 
 ---
 
@@ -401,10 +401,10 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 
 갱신은 `marketplace update` → `plugin update` 순서다.
 플러그인을 고쳤다면 버전을 세 곳에 맞춰야 한다
-([README.md §1-1](./README.md) "버전 올리는 순서").
+([docs/development.md](./docs/development.md) 「플러그인 릴리스」).
 
 `setup.sh` 6단계가 대신한다 — `claude plugin` 설치와 직접 복사 중 고르고, 직접 복사면
-스킬 2개·명령 5개를 전부 옮긴다. 자세한 것은 [README.md §1-1](./README.md).
+스킬 2개·명령 5개를 전부 옮긴다. 자세한 것은 [docs/install.md](./docs/install.md) 「슬래시 명령으로 쓰기 — 플러그인」.
 
 세션 재시작 후 세 개가 뜬다.
 
@@ -417,7 +417,7 @@ claude plugin install bb-pr-review@bb-mcp --scope user
 | `/bb-repos` | 허용 저장소 목록 · `add <ws/repo>` 로 추가 |
 
 다섯 명령 모두 **결과를 마크다운 표로** 낸다. 툴이 돌려주는 JSON을 그대로
-붙이지 않는다. 형식 규칙은 [README.md §3 "결과는 마크다운 표로 낸다"](./README.md).
+붙이지 않는다. 형식 규칙은 [docs/usage.md](./docs/usage.md) 「결과는 마크다운 표로 낸다」.
 
 **저장소 루트에 `.mcp.json` 을 만들지 않는다.** 프로젝트 스코프 MCP 설정으로
 읽혀서 user 스코프 등록을 덮어쓰고, 서버가 `CONNECTION_CLOSED` 로 죽는다.
@@ -575,14 +575,14 @@ bb_comment(repo, id, body, path, line)  줄 단위로 코멘트
 
 **위 목록은 리뷰 흐름에 쓰는 것만이다.** 전체 20개(PR 생성 `bb_pr_create`,
 파일 이력 `bb_file_history`, 브랜치 커밋 `bb_branch_commits`, allowlist 추가
-`bb_allowlist_add` 등)는 [README.md §3](./README.md)의 툴 표를 본다 — 여기에
+`bb_allowlist_add` 등)는 [docs/usage.md](./docs/usage.md)의 툴 표를 본다 — 여기에
 복제하면 두 곳이 갈린다.
 
 `bb_file`은 diff의 hunk만으로 판단이 안 설 때 쓴다. 줄 번호가 붙어 나오므로
 `bb_comment`의 `line`을 여기서 그대로 읽는다.
 
 `bb_pr_diff`의 변경 후 줄 번호, `bb_file`의 줄 번호, `bb_comment`의 `line`이
-모두 같은 좌표계임을 실측으로 확인했다([README.md §6](./README.md)).
+모두 같은 좌표계임을 실측으로 확인했다([docs/development.md](./docs/development.md) 「동작 확인」).
 변경 전 파일의 줄을 지목할 때만 `side: "old"`를 쓴다.
 
 **`bb_pr_diff`는 `path` 없이 부르지 않는 걸 기본으로 삼는다.**
@@ -610,6 +610,6 @@ bb_comment(repo, id, body, path, line)  줄 단위로 코멘트
   읽기만 재시도한다
 - **판정 대상과 전송 대상이 같다.** 가드는 문자열이 아니라 `fetch`에 넘길
   `URL` 객체를 검사한다. 문자열 검사는 실제로 `%2e%2e` 로 우회됐다
-  ([README.md §7](./README.md))
+  ([docs/security.md](./docs/security.md))
 - **짧다.** `server.mjs` 690줄 + `lib.mjs` 390줄. 토큰이 어디로 나가는지 눈으로 확인된다
 - **응답 필드 강제.** PR 원본 JSON은 수백 줄이지만 `bb_pr_get`은 20줄 이하로 줄인다

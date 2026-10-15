@@ -11,6 +11,8 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const server = readFileSync("server.mjs", "utf8");
 const readme = readFileSync("README.md", "utf8");
+// 2026-10-15 에 README 를 쪼개며 툴 레퍼런스가 docs/usage.md 로 갔다. 개수는 README 가 말한다
+const toolRef = readFileSync("docs/usage.md", "utf8");
 
 /** server.mjs 의 registerTool 블록에서 [툴 이름, inputSchema 키 목록] 을 뽑는다 */
 function toolsFromCode() {
@@ -28,14 +30,14 @@ function toolsFromCode() {
 test("모든 툴이 README 에 시그니처를 갖는다", () => {
   const missing = toolsFromCode()
     .map(([name]) => name)
-    .filter((name) => !new RegExp("`" + name + "\\(").test(readme));
-  assert.deepEqual(missing, [], "README §3 툴 표에 위 툴의 `이름(...)` 이 없다");
+    .filter((name) => !new RegExp("`" + name + "\\(").test(toolRef));
+  assert.deepEqual(missing, [], "docs/usage.md 툴 표에 위 툴의 `이름(...)` 이 없다");
 });
 
 test("툴의 모든 파라미터가 README 시그니처에 적혀 있다", () => {
   const gaps = [];
   for (const [name, keys] of toolsFromCode()) {
-    const sig = readme.match(new RegExp("`" + name + "\\(([^)]*)\\)`"))?.[1];
+    const sig = toolRef.match(new RegExp("`" + name + "\\(([^)]*)\\)`"))?.[1];
     if (sig === undefined) continue; // 위 테스트가 잡는다
     for (const k of keys) {
       if (!sig.includes(k)) gaps.push(`${name}: ${k}`);
@@ -44,7 +46,7 @@ test("툴의 모든 파라미터가 README 시그니처에 적혀 있다", () =>
   // 선택 파라미터도 적는다 — 안 적으면 그 기능이 없는 것처럼 보인다.
   // 실제로 bb_pr_create 의 reviewers 가 `...` 뒤에 숨어 있어, 리뷰어 지정이
   // 가능한지 알려면 코드를 열어야 했다.
-  assert.deepEqual(gaps, [], "위 파라미터가 README 시그니처에 빠져 있다");
+  assert.deepEqual(gaps, [], "위 파라미터가 docs/usage.md 시그니처에 빠져 있다");
 });
 
 test("툴 개수가 문서와 맞는다", () => {

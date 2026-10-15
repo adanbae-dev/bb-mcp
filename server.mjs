@@ -84,7 +84,7 @@ const EMAIL = requireEnv("BITBUCKET_EMAIL");
 const ALLOW_COMMENT = process.env.BITBUCKET_ALLOW_COMMENT === "true";
 const ALLOW_WRITE = process.env.BITBUCKET_ALLOW_WRITE === "true";
 // allowlist 파일에 저장소를 추가하는 툴. 기본 차단.
-// 에이전트는 Write/Edit 로도 이 파일을 고칠 수 있으므로(README §7 ②) 이 게이트가
+// 에이전트는 Write/Edit 로도 이 파일을 고칠 수 있으므로(docs/security.md 「막지 못하는 것」 ②) 이 게이트가
 // 단단한 경계는 아니다. 값은 (a) 기본이 off (b) 추가 흔적이 파일에 남는다는 것.
 const ALLOW_ALLOWLIST_WRITE = process.env.BITBUCKET_ALLOW_ALLOWLIST_WRITE === "true";
 // PR 생성. 승인·머지와는 성질이 다르다 — 생성은 검토를 요청하는 것이고 되돌릴 수 있다.
@@ -179,7 +179,7 @@ const FORMAT_HINT =
 // 경계의 실체는 "설정을 고치기 어렵다"가 아니라 "고쳐도 재시작해야 먹는다"다.
 // 하이재킹된 에이전트가 파일을 고쳐도 그 세션에서는 쓸 수 없어야 한다.
 // true 로 켜면 재시작 없이 반영되지만, 에이전트가 Write/Edit 로 파일을 고쳐
-// 스스로 경계를 넓힐 수 있다 (README §7 ②).
+// 스스로 경계를 넓힐 수 있다 (docs/security.md 「막지 못하는 것」 ②).
 const ALLOWLIST_RELOAD = process.env.BITBUCKET_ALLOWLIST_RELOAD === "true";
 
 function readAllowlistFile() {
